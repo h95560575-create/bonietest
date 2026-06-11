@@ -56,7 +56,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
-    if (url.pathname === "/api/health") return sendJson(res, { ok: true, secureMode: isSupabaseConfigured() });
+    if (url.pathname === "/api/health") return sendJson(res, {
+      ok: true,
+      secureMode: isSupabaseConfigured(),
+      env: {
+        supabaseUrl: Boolean(SUPABASE_URL),
+        supabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
+        supabaseServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+        nodeEnv: process.env.NODE_ENV || "",
+      },
+    });
     if (url.pathname === "/api/auth/login") return handleLogin(req, res);
     if (url.pathname === "/api/auth/logout") return handleLogout(req, res);
     if (url.pathname === "/api/auth/me") return handleMe(req, res);
@@ -261,18 +270,22 @@ async function findProfileByUserId(userId) {
 async function supabaseRest(pathname, method, body, extraHeaders = {}) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, {
     method,
-    headers: {
+    headers: supabaseRestHeaders({
       apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
       ...extraHeaders,
-    },
+    }),
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) throw new Error(`Supabase REST error ${response.status}: ${await response.text()}`);
   if (response.status === 204) return null;
   const text = await response.text();
   return text ? JSON.parse(text) : null;
+}
+
+function supabaseRestHeaders(headers) {
+  if (SUPABASE_SERVICE_ROLE_KEY.startsWith("sb_secret_")) return headers;
+  return { ...headers, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` };
 }
 
 async function supabaseAuth(pathname, method, bearer, body) {

@@ -14,12 +14,11 @@ async function main() {
   const value = JSON.parse(raw);
   const response = await fetch(`${SUPABASE_URL}/rest/v1/app_state?on_conflict=key`, {
     method: "POST",
-    headers: {
+    headers: supabaseHeaders({
       apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
       Prefer: "resolution=merge-duplicates,return=minimal",
-    },
+    }),
     body: JSON.stringify({
       key: "inventory",
       value,
@@ -32,6 +31,11 @@ async function main() {
   }
 
   console.log("Local inventory-state.json uploaded to Supabase app_state.");
+}
+
+function supabaseHeaders(headers) {
+  if (SUPABASE_SERVICE_ROLE_KEY.startsWith("sb_secret_")) return headers;
+  return { ...headers, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` };
 }
 
 main().catch((error) => {
