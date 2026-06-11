@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>재고 소진 단종품 재고 확인</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">B</div>
+          <div>
+            <h1>재고 소진 단종품 재고 확인</h1>
+            <p id="saveStatus">로컬 저장 준비됨</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="button" id="exportBtn" type="button">CSV 내보내기</button>
+          <button class="button subtle" id="adminBtn" type="button" hidden>관리자모드</button>
+          <button class="button primary" id="loginBtn" type="button">로그인</button>
+          <!-- <button class="button subtle" id="clearDataBtn" type="button">초기화</button> -->
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="summary-grid" aria-label="재고 요약">
+          <button class="metric" data-jump-tab="all" type="button">
+            <span>전체 상품</span>
+            <strong id="totalCount">0</strong>
+          </button>
+          <button class="metric danger" data-jump-tab="negative" type="button">
+            <span>마이너스</span>
+            <strong id="negativeCount">0</strong>
+          </button>
+          <button class="metric warning" data-jump-tab="stockChange" type="button">
+            <span>10개 미만 변동</span>
+            <strong id="watchCount">0</strong>
+          </button>
+        </section>
+
+        <section class="control-bar">
+          <nav class="tabs" aria-label="재고 보기">
+            <button class="tab" data-tab="watch" type="button">보류필요</button>
+            <button class="tab" data-tab="stockChange" type="button">10개 미만 변동</button>
+            <button class="tab" data-tab="negative" type="button">마이너스</button>
+            <button class="tab" data-tab="low5" type="button">5개 이하</button>
+            <button class="tab" data-tab="import" type="button">파일등록</button>
+          </nav>
+          <div class="filters">
+            <label class="field author-field">
+              <span>로그인 사용자</span>
+              <input id="authorInput" type="text" placeholder="로그인 필요" autocomplete="off" readonly />
+            </label>
+            <label class="field compact">
+              <span>검색</span>
+              <input id="searchInput" type="search" placeholder="상품코드, 상품명" autocomplete="off" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel" id="inventoryPanel">
+          <div class="panel-toolbar">
+            <nav class="view-tabs" aria-label="표시 컬럼 보기">
+              <button class="view-tab active" data-view="all" type="button">전체</button>
+              <button class="view-tab" data-view="stock" type="button">재고/일정</button>
+              <button class="view-tab" data-view="catalog" type="button">구성/링크</button>
+            </nav>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr id="inventoryHead"></tr>
+              </thead>
+              <tbody id="inventoryBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="emptyState" hidden>
+            <strong>표시할 상품이 없습니다.</strong>
+          </div>
+          <div class="pagination-bar" id="paginationBar" hidden>
+            <button class="page-edge" id="firstPageBtn" type="button">맨처음</button>
+            <div class="page-number-list" id="pageNumberList"></div>
+            <button class="page-edge" id="lastPageBtn" type="button">맨끝</button>
+            <span id="pageInfo">총 0개</span>
+          </div>
+        </section>
+
+        <section class="panel import-panel" id="importPanel" hidden>
+          <div class="import-grid">
+            <div class="import-box">
+              <div>
+                <h2>심플 전체 재고목록</h2>
+                <p id="inventoryImportMeta">상품명, 코드, 현재고, 처리중, 가용재고가 있는 CSV/TSV/XLSX</p>
+              </div>
+              <button class="button primary" id="inventoryImportBtn" type="button">재고목록 등록</button>
+              <input id="inventoryFileInput" type="file" accept=".csv,.tsv,.xlsx" multiple hidden />
+            </div>
+            <div class="import-box">
+              <div>
+                <h2>주문서</h2>
+                <p id="orderImportMeta">상품명, 코드, 주문수량이 있는 CSV/TSV/XLSX</p>
+              </div>
+              <button class="button primary" id="orderImportBtn" type="button">주문서 등록</button>
+              <input id="orderFileInput" type="file" accept=".csv,.tsv,.xlsx" multiple hidden />
+            </div>
+            <div class="import-box">
+              <div>
+                <h2>입고일정</h2>
+                <p id="scheduleImportMeta">상품번호, 상품명, 입고일정, 입고수량 양식</p>
+              </div>
+              <div class="button-row">
+                <button class="button" id="scheduleTemplateBtn" type="button">양식 다운로드</button>
+                <button class="button primary" id="scheduleImportBtn" type="button">입고일정 등록</button>
+              </div>
+              <input id="scheduleFileInput" type="file" accept=".csv,.tsv,.xlsx" multiple hidden />
+            </div>
+          </div>
+
+          <div class="mapping-panel">
+            <h2>최근 인식 컬럼</h2>
+            <div class="column-chips" id="columnChips"></div>
+          </div>
+
+          <div class="activity-panel">
+            <div class="section-title">
+              <h2>처리 기록</h2>
+              <button class="button subtle" id="clearLogBtn" type="button">기록 비우기</button>
+            </div>
+            <div class="activity-list" id="activityList"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="historyModal" hidden>
+      <section class="history-modal" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+        <div class="history-modal-head">
+          <div>
+            <span>상품별 자동수정기록</span>
+            <h2 id="historyTitle">기록보기</h2>
+          </div>
+          <button class="icon-button" id="historyCloseBtn" type="button" aria-label="닫기">×</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="loginModal" hidden>
+      <section class="history-modal login-modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+        <div class="history-modal-head">
+          <div>
+            <span>사용자 확인</span>
+            <h2 id="loginTitle">로그인</h2>
+          </div>
+          <button class="icon-button" id="loginCloseBtn" type="button" aria-label="닫기">×</button>
+        </div>
+        <form class="login-form" id="loginForm">
+          <label class="field">
+            <span>아이디</span>
+            <input id="loginName" type="text" placeholder="아이디" autocomplete="username" required />
+          </label>
+          <label class="field">
+            <span>비밀번호</span>
+            <input id="loginPassword" type="password" placeholder="비밀번호" required />
+          </label>
+          <p class="login-message" id="loginMessage"></p>
+          <div class="dialog-actions">
+            <button class="button primary" type="submit">로그인</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="adminModal" hidden>
+      <section class="history-modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+        <div class="history-modal-head">
+          <div>
+            <span>관리자 전용</span>
+            <h2 id="adminTitle">사용자 권한</h2>
+          </div>
+          <button class="icon-button" id="adminCloseBtn" type="button" aria-label="닫기">×</button>
+        </div>
+        <div class="admin-user-list" id="adminUserList"></div>
+        <p class="login-message" id="adminMessage"></p>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

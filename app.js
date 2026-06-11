@@ -1,0 +1,1839 @@
+const STORAGE_KEY = "jaesodanInventory.v2";
+const AUTHOR_KEY = "jaesodanInventory.author";
+const LOGIN_KEY = "jaesodanInventory.loginUser";
+const API_STATE_URL = "/api/state";
+const PAGE_SIZE = 50;
+
+const COLUMNS = [
+  { key: "status", label: "상태" },
+  { key: "code", label: "상품코드" },
+  { key: "codeChange", label: "변경코드" },
+  { key: "parentCode", label: "엄마코드" },
+  { key: "simpleStatus", label: "심플상태" },
+  { key: "name", label: "상품명" },
+  { key: "stock", label: "현재고" },
+  { key: "processingStock", label: "처리중" },
+  { key: "availableStock", label: "가용재고" },
+  { key: "inboundDate", label: "입고일정" },
+  { key: "inboundQty", label: "입고수량" },
+  { key: "orderQty", label: "주문서수량" },
+  { key: "source", label: "재고목록" },
+  { key: "note", label: "메모" },
+  { key: "history", label: "기록" },
+  { key: "updatedAt", label: "수정일" },
+];
+
+const VIEW_COLUMNS = {
+  core: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  stock: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt"],
+  catalog: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  all: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+};
+
+const HEADER_ALIASES = {
+  code: [
+    "상품코드",
+    "상품 코드",
+    "상품번호",
+    "상품 번호",
+    "품목코드",
+    "옵션코드",
+    "판매자상품코드",
+    "판매자 관리코드",
+    "관리코드",
+    "sku",
+    "code",
+    "productcode",
+    "itemcode",
+  ],
+  name: ["상품명", "상품 명", "상품명(심플명)", "심플명", "품목명", "옵션명", "productname", "itemname", "name"],
+  stock: ["현재고", "현재 재고", "재고", "재고수량", "재고 수량", "stock", "stockqty", "inventory"],
+  processingStock: ["처리중", "처리 중", "미발송", "미발송수량", "출고대기", "processing", "inprogress"],
+  availableStock: ["가용재고", "가용 재고", "판매가능수량", "판매 가능 수량", "available", "availablestock"],
+  orderQty: ["주문수량", "주문 수량", "구매수량", "구매 수량", "수량", "orderqty", "quantity", "qty"],
+  simpleStatus: ["심플상태", "심플 상태", "상태", "판매상태", "판매 상태", "승인상태", "승인 상태", "처리상태", "처리 상태"],
+  inboundDate: ["입고일정", "입고 일정", "입고예정일", "입고 예정일", "입고일", "schedule", "inbounddate"],
+  inboundQty: ["입고수량", "입고 수량", "입고예정수량", "입고 예정 수량", "수량", "inboundqty"],
+};
+
+const ALIAS_SETS = Object.fromEntries(
+  Object.entries(HEADER_ALIASES).map(([key, values]) => [key, new Set(values.map(normalizeHeader))]),
+);
+
+let state = loadState();
+let activeTab = "all";
+let activeView = "all";
+let currentPage = 1;
+let serverSyncEnabled = false;
+let saveDebounceId = null;
+let saveInFlight = false;
+let queuedServerSave = false;
+let lastLocalChangeAt = 0;
+let currentUser = null;
+
+const els = {
+  authorInput: document.getElementById("authorInput"),
+  saveStatus: document.getElementById("saveStatus"),
+  totalCount: document.getElementById("totalCount"),
+  negativeCount: document.getElementById("negativeCount"),
+  watchCount: document.getElementById("watchCount"),
+  inventoryHead: document.getElementById("inventoryHead"),
+  inventoryBody: document.getElementById("inventoryBody"),
+  emptyState: document.getElementById("emptyState"),
+  paginationBar: document.getElementById("paginationBar"),
+  pageInfo: document.getElementById("pageInfo"),
+  firstPageBtn: document.getElementById("firstPageBtn"),
+  lastPageBtn: document.getElementById("lastPageBtn"),
+  pageNumberList: document.getElementById("pageNumberList"),
+  inventoryPanel: document.getElementById("inventoryPanel"),
+  importPanel: document.getElementById("importPanel"),
+  searchInput: document.getElementById("searchInput"),
+  panelToolbar: document.querySelector(".panel-toolbar"),
+  exportBtn: document.getElementById("exportBtn"),
+  adminBtn: document.getElementById("adminBtn"),
+  loginBtn: document.getElementById("loginBtn"),
+  clearDataBtn: document.getElementById("clearDataBtn"),
+  inventoryImportBtn: document.getElementById("inventoryImportBtn"),
+  orderImportBtn: document.getElementById("orderImportBtn"),
+  scheduleTemplateBtn: document.getElementById("scheduleTemplateBtn"),
+  scheduleImportBtn: document.getElementById("scheduleImportBtn"),
+  inventoryFileInput: document.getElementById("inventoryFileInput"),
+  orderFileInput: document.getElementById("orderFileInput"),
+  scheduleFileInput: document.getElementById("scheduleFileInput"),
+  inventoryImportMeta: document.getElementById("inventoryImportMeta"),
+  orderImportMeta: document.getElementById("orderImportMeta"),
+  scheduleImportMeta: document.getElementById("scheduleImportMeta"),
+  columnChips: document.getElementById("columnChips"),
+  activityList: document.getElementById("activityList"),
+  clearLogBtn: document.getElementById("clearLogBtn"),
+  historyModal: document.getElementById("historyModal"),
+  historyTitle: document.getElementById("historyTitle"),
+  historyList: document.getElementById("historyList"),
+  historyCloseBtn: document.getElementById("historyCloseBtn"),
+  loginModal: document.getElementById("loginModal"),
+  loginForm: document.getElementById("loginForm"),
+  loginName: document.getElementById("loginName"),
+  loginPassword: document.getElementById("loginPassword"),
+  loginMessage: document.getElementById("loginMessage"),
+  loginCloseBtn: document.getElementById("loginCloseBtn"),
+  adminModal: document.getElementById("adminModal"),
+  adminCloseBtn: document.getElementById("adminCloseBtn"),
+  adminUserList: document.getElementById("adminUserList"),
+  adminMessage: document.getElementById("adminMessage"),
+};
+
+document.querySelectorAll("[data-tab]").forEach((button) => {
+  button.addEventListener("click", () => setTab(button.dataset.tab));
+});
+
+document.querySelectorAll("[data-jump-tab]").forEach((button) => {
+  button.addEventListener("click", () => setTab(button.dataset.jumpTab));
+});
+
+document.querySelectorAll("[data-view]").forEach((button) => {
+  button.addEventListener("click", () => setView(button.dataset.view));
+});
+
+els.searchInput.addEventListener("input", () => {
+  currentPage = 1;
+  render();
+});
+els.firstPageBtn.addEventListener("click", () => {
+  currentPage = 1;
+  render();
+});
+els.lastPageBtn.addEventListener("click", () => {
+  currentPage = Number(els.lastPageBtn.dataset.page || currentPage);
+  render();
+});
+els.pageNumberList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-page]");
+  if (!button) return;
+  currentPage = Number(button.dataset.page || 1);
+  render();
+});
+els.exportBtn.addEventListener("click", exportCsv);
+els.adminBtn.addEventListener("click", openAdminModal);
+els.loginBtn.addEventListener("click", handleLoginButton);
+if (els.clearDataBtn) els.clearDataBtn.addEventListener("click", clearAllData);
+els.inventoryImportBtn.addEventListener("click", () => {
+  if (requireLogin("uploadInventory")) els.inventoryFileInput.click();
+});
+els.orderImportBtn.addEventListener("click", () => {
+  if (requireLogin("uploadInventory")) els.orderFileInput.click();
+});
+els.scheduleTemplateBtn.addEventListener("click", downloadScheduleTemplate);
+els.scheduleImportBtn.addEventListener("click", () => {
+  if (requireLogin("editSchedule")) els.scheduleFileInput.click();
+});
+els.inventoryFileInput.addEventListener("change", () => handleFileSelection("inventory"));
+els.orderFileInput.addEventListener("change", () => handleFileSelection("orders"));
+els.scheduleFileInput.addEventListener("change", () => handleFileSelection("schedule"));
+els.clearLogBtn.addEventListener("click", clearActivity);
+els.inventoryBody.addEventListener("change", handleTableEdit);
+els.inventoryBody.addEventListener("click", handleTableClick);
+els.historyCloseBtn.addEventListener("click", closeHistoryModal);
+els.historyModal.addEventListener("click", (event) => {
+  if (event.target === els.historyModal) closeHistoryModal();
+});
+els.loginCloseBtn.addEventListener("click", closeLoginModal);
+els.loginModal.addEventListener("click", (event) => {
+  if (event.target === els.loginModal) closeLoginModal();
+});
+els.loginForm.addEventListener("submit", handleLoginSubmit);
+els.adminCloseBtn.addEventListener("click", closeAdminModal);
+els.adminModal.addEventListener("click", (event) => {
+  if (event.target === els.adminModal) closeAdminModal();
+});
+els.adminUserList.addEventListener("change", handleAdminPermissionChange);
+
+render();
+bootApp();
+
+async function bootApp() {
+  await restoreLogin();
+  await bootSharedState();
+  render();
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? normalizeState(JSON.parse(raw)) : createDefaultState();
+  } catch {
+    return createDefaultState();
+  }
+}
+
+function createDefaultState() {
+  return { items: [], activity: [], lastColumns: [], memoResetVersion: 1 };
+}
+
+function normalizeState(snapshot) {
+  const memoResetVersion = Number(snapshot?.memoResetVersion || 0);
+  const items = Array.isArray(snapshot?.items) ? snapshot.items.map(cleanItem).filter(Boolean) : [];
+  if (memoResetVersion < 1) {
+    items.forEach((item) => {
+      item.note = "";
+    });
+  }
+  return {
+    items,
+    activity: Array.isArray(snapshot?.activity) ? snapshot.activity.slice(0, 100) : [],
+    lastColumns: Array.isArray(snapshot?.lastColumns) ? snapshot.lastColumns.map(String).slice(0, 30) : [],
+    memoResetVersion: 1,
+  };
+}
+
+function cleanItem(item) {
+  const code = normalizeCode(item?.code || item?.productCode || item?.sku);
+  if (!code) return null;
+  return {
+    id: String(item.id || createId()),
+    code,
+    codeChange: String(item.codeChange || "").trim(),
+    parentCode: Boolean(item.parentCode),
+    simpleStatus: normalizeSimpleStatus(item.simpleStatus),
+    name: String(item.name || "").trim(),
+    stock: toInteger(item.stock, 0),
+    previousStock: toOptionalInteger(item.previousStock),
+    stockDelta: toInteger(item.stockDelta, 0),
+    processingStock: toInteger(item.processingStock, 0),
+    previousProcessingStock: toOptionalInteger(item.previousProcessingStock),
+    processingStockDelta: toInteger(item.processingStockDelta, 0),
+    availableStock: toInteger(item.stock, 0) - toInteger(item.processingStock, 0),
+    previousAvailableStock: toOptionalInteger(item.previousAvailableStock),
+    availableStockDelta: toInteger(item.availableStockDelta, 0),
+    stockChangedAt: item.stockChangedAt || "",
+    inboundDate: String(item.inboundDate || "").trim(),
+    inboundQty: toInteger(item.inboundQty, 0),
+    orderQty: toInteger(item.orderQty, 0),
+    inSimpleStock: Boolean(item.inSimpleStock ?? item.inApprovedStock),
+    hiddenFromInventory: Boolean(item.hiddenFromInventory),
+    source: String(item.source || "").trim(),
+    note: String(item.note || "").trim(),
+    history: normalizeItemHistory(item.history),
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: item.updatedAt || new Date().toISOString(),
+  };
+}
+
+function persist() {
+  lastLocalChangeAt = Date.now();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  els.saveStatus.textContent = serverSyncEnabled
+    ? `공유 저장 예약됨 ${formatTime(new Date().toISOString())}`
+    : `로컬 저장됨 ${formatTime(new Date().toISOString())}`;
+  queueServerSave();
+}
+
+async function bootSharedState() {
+  if (!isServerBacked()) {
+    els.saveStatus.textContent = "브라우저 로컬 저장 중";
+    return;
+  }
+
+  try {
+    els.saveStatus.textContent = "공유 서버 연결 중";
+    const sharedState = await fetchSharedState();
+    const localState = normalizeState(state);
+    serverSyncEnabled = true;
+
+    if (!sharedState.items?.length && localState.items.length) {
+      await saveSnapshotToServer(localState);
+      els.saveStatus.textContent = `로컬 데이터를 공유 저장소로 이전함 ${formatTime(new Date().toISOString())}`;
+    } else {
+      replaceState(sharedState);
+      render();
+      els.saveStatus.textContent = `공유 저장소 연결됨 ${formatTime(new Date().toISOString())}`;
+    }
+
+    setInterval(refreshSharedState, 15000);
+  } catch (error) {
+    els.saveStatus.textContent = "공유 서버 연결 실패, 로컬 저장 중";
+    console.warn(error);
+  }
+}
+
+function replaceState(snapshot) {
+  state = normalizeState(snapshot);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function isServerBacked() {
+  return typeof fetch === "function" && typeof location !== "undefined" && /^https?:$/.test(location.protocol);
+}
+
+async function fetchSharedState() {
+  const response = await fetch(API_STATE_URL, { headers: { Accept: "application/json" }, credentials: "same-origin" });
+  if (!response.ok) throw new Error(`공유 데이터 조회 실패 (${response.status})`);
+  return response.json();
+}
+
+function queueServerSave() {
+  if (!isServerBacked()) return;
+  clearTimeout(saveDebounceId);
+  saveDebounceId = setTimeout(saveStateToServer, 250);
+}
+
+async function saveStateToServer() {
+  if (!isServerBacked()) return;
+  if (saveInFlight) {
+    queuedServerSave = true;
+    return;
+  }
+
+  saveInFlight = true;
+  queuedServerSave = false;
+  try {
+    await saveSnapshotToServer(normalizeState(state));
+    serverSyncEnabled = true;
+    els.saveStatus.textContent = `공유 저장됨 ${formatTime(new Date().toISOString())}`;
+  } catch (error) {
+    els.saveStatus.textContent = "공유 저장 실패, 로컬에는 저장됨";
+    console.warn(error);
+  } finally {
+    saveInFlight = false;
+    if (queuedServerSave) saveStateToServer();
+  }
+}
+
+async function saveSnapshotToServer(snapshot) {
+  const response = await fetch(API_STATE_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(snapshot),
+  });
+  if (!response.ok) throw new Error(`공유 저장 실패 (${response.status})`);
+  return response.json();
+}
+
+async function refreshSharedState() {
+  if (!serverSyncEnabled || Date.now() - lastLocalChangeAt < 3000) return;
+  try {
+    const sharedState = normalizeState(await fetchSharedState());
+    if (JSON.stringify(normalizeState(state)) !== JSON.stringify(sharedState)) {
+      replaceState(sharedState);
+      render();
+      els.saveStatus.textContent = `공유 데이터 갱신됨 ${formatTime(new Date().toISOString())}`;
+    }
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function render() {
+  const items = state.items.filter(isVisibleInventoryItem).map((item) => ({ ...item, status: getStatus(item) }));
+  const total = items.length;
+  const negative = items.filter((item) => item.status.key === "negative").length;
+  const watch = items.filter(hasLowStockChange).length;
+
+  els.totalCount.textContent = formatNumber(total);
+  els.negativeCount.textContent = formatNumber(negative);
+  els.watchCount.textContent = formatNumber(watch);
+
+  document.querySelectorAll("[data-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === activeTab);
+  });
+
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === activeView);
+  });
+
+  els.inventoryPanel.hidden = activeTab === "import";
+  els.importPanel.hidden = activeTab !== "import";
+
+  renderImportPanel();
+  renderTable();
+  updateLoginLockedControls();
+}
+
+function renderTable() {
+  if (activeTab === "import") return;
+  const query = normalizeSearch(els.searchInput.value);
+  const rows = state.items
+    .filter(isVisibleInventoryItem)
+    .map((item) => ({ ...item, status: getStatus(item) }))
+    .filter((item) => {
+      if (!matchesActiveTab(item)) return false;
+      if (!query) return true;
+      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note}`).includes(query);
+    })
+    .sort(sortItems);
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  currentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  els.emptyState.hidden = rows.length > 0;
+  els.inventoryHead.innerHTML = getVisibleColumns().map((column) => `<th class="${getColumnHeaderClass(column.key)}">${escapeHtml(column.label)}</th>`).join("");
+  els.inventoryBody.innerHTML = pageRows.map(renderRow).join("");
+  renderPagination(rows.length, totalPages);
+}
+
+function renderPagination(totalRows, totalPages) {
+  els.paginationBar.hidden = totalRows <= PAGE_SIZE;
+  els.pageInfo.textContent = `총 ${formatNumber(totalRows)}개`;
+  els.firstPageBtn.disabled = currentPage <= 1;
+  els.lastPageBtn.disabled = currentPage >= totalPages;
+  els.lastPageBtn.dataset.page = String(totalPages);
+  els.pageNumberList.innerHTML = getPageNumbers(currentPage, totalPages)
+    .map((page) =>
+      page === "gap"
+        ? `<span class="page-gap">…</span>`
+        : `<button class="page-number ${page === currentPage ? "active" : ""}" data-page="${page}" type="button">${formatNumber(page)}</button>`,
+    )
+    .join("");
+}
+
+function getPageNumbers(page, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const pages = new Set([1, totalPages, page - 1, page, page + 1]);
+  if (page <= 3) [2, 3, 4].forEach((item) => pages.add(item));
+  if (page >= totalPages - 2) [totalPages - 3, totalPages - 2, totalPages - 1].forEach((item) => pages.add(item));
+  const sorted = [...pages].filter((item) => item >= 1 && item <= totalPages).sort((a, b) => a - b);
+  return sorted.flatMap((item, index) => (index > 0 && item - sorted[index - 1] > 1 ? ["gap", item] : [item]));
+}
+
+function renderRow(item) {
+  const rowClass = `row-${item.status.key}`;
+  return `
+    <tr class="${rowClass}">
+      ${getVisibleColumns().map((column) => renderCell(item, column)).join("")}
+    </tr>
+  `;
+}
+
+function getVisibleColumns() {
+  const keys = VIEW_COLUMNS[activeView] || VIEW_COLUMNS.all;
+  return keys.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean);
+}
+
+function getColumnHeaderClass(key) {
+  if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
+  if (["status", "parentCode", "simpleStatus", "history"].includes(key)) return "center-head";
+  if (["inboundDate", "updatedAt"].includes(key)) return "date-head";
+  if (key === "codeChange") return "code-change-head";
+  if (key === "code") return "code-head";
+  return "";
+}
+
+function renderCell(item, column) {
+  if (column.key === "status") {
+    return `<td><span class="status ${item.status.className}">${escapeHtml(item.status.label)}</span></td>`;
+  }
+  if (column.key === "code") return `<td class="code-cell">${escapeHtml(item.code)}</td>`;
+  if (column.key === "codeChange") return renderCodeChangeCell(item);
+  if (column.key === "parentCode") return renderParentCodeCell(item);
+  if (column.key === "simpleStatus") return `<td>${renderSimpleStatus(item.simpleStatus)}</td>`;
+  if (column.key === "name") return renderNameCell(item);
+  if (["stock", "processingStock", "availableStock", "orderQty", "inboundQty"].includes(column.key)) {
+    const value = column.key === "availableStock" ? item.stock - item.processingStock : item[column.key] || 0;
+    if (["stock", "processingStock", "availableStock"].includes(column.key)) {
+      return renderStockNumberCell(item, column.key, value);
+    }
+    return `<td class="number-cell">${formatNumber(value)}</td>`;
+  }
+  if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
+  if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서/기존자료"}</td>`;
+  if (column.key === "note") {
+    return `
+      <td class="note-cell">
+        <textarea data-note-input data-code="${escapeHtml(item.code)}" rows="2" placeholder="비고나 특이사항 입력">${escapeHtml(item.note || "")}</textarea>
+      </td>
+    `;
+  }
+  if (column.key === "history") return renderHistoryCell(item);
+  if (column.key === "updatedAt") return `<td class="date-cell">${escapeHtml(formatDate(item.updatedAt))}</td>`;
+  return `<td class="text-cell">${escapeHtml(item[column.key] || "-")}</td>`;
+}
+
+function renderNameCell(item) {
+  const hasDot = shouldShowNewAlertDot(item);
+  return `
+    <td class="name-cell ${hasDot ? "has-new-alert" : ""}">
+      <div class="name-line">
+        ${hasDot ? `<span class="new-alert-dot" title="새로 생긴 주의 품목" aria-label="새로 생긴 주의 품목"></span>` : ""}
+        <strong>${escapeHtml(item.name || "-")}</strong>
+      </div>
+    </td>
+  `;
+}
+
+function handleTableEdit(event) {
+  if (!event.target.matches("[data-note-input], [data-code-change-input]")) return;
+  const permissionKey = event.target.matches("[data-note-input]") ? "editMemo" : "manageLinks";
+  if (!requireLogin(permissionKey)) {
+    render();
+    return;
+  }
+  const item = findItemByCode(event.target.dataset.code);
+  if (!item) return;
+  if (event.target.matches("[data-note-input]")) {
+    const nextValue = event.target.value.trim();
+    recordItemEdit(item, "메모", item.note, nextValue);
+    item.note = nextValue;
+  } else {
+    const nextValue = event.target.value.trim();
+    recordItemEdit(item, "변경코드", item.codeChange, nextValue);
+    item.codeChange = nextValue;
+  }
+  item.updatedAt = new Date().toISOString();
+  persist();
+  render();
+}
+
+function renderCodeChangeCell(item) {
+  return `
+    <td class="code-change-cell">
+      <input data-code-change-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.codeChange || "")}" placeholder="예: 7004" />
+    </td>
+  `;
+}
+
+function handleTableClick(event) {
+  const historyButton = event.target.closest("[data-history-open]");
+  if (historyButton) {
+    const item = findItemByCode(historyButton.dataset.code);
+    if (item) openHistoryModal(item);
+    return;
+  }
+
+  const button = event.target.closest("[data-parent-code-toggle]");
+  if (!button) return;
+  if (!requireLogin("manageLinks")) return;
+  const item = findItemByCode(button.dataset.code);
+  if (!item) return;
+  const nextValue = !item.parentCode;
+  recordItemEdit(item, "엄마코드", item.parentCode ? "지정" : "미지정", nextValue ? "지정" : "미지정");
+  item.parentCode = !item.parentCode;
+  item.updatedAt = new Date().toISOString();
+  persist();
+  render();
+}
+
+function renderHistoryCell(item) {
+  return `
+    <td class="history-cell">
+      <button class="history-button" data-history-open data-code="${escapeHtml(item.code)}" type="button">기록보기</button>
+    </td>
+  `;
+}
+
+function renderStockNumberCell(item, key, value) {
+  const delta = getStockDelta(item, key);
+  const valueClass = key === "availableStock" ? item.status.className : "";
+  if (!delta) return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
+  const deltaClass = delta > 0 ? "number-delta-up" : "number-delta-down";
+  const arrow = delta > 0 ? "↑" : "↓";
+  return `
+    <td class="number-cell ${valueClass}">
+      <span class="number-value">${formatNumber(value)}</span>
+      <span class="number-delta ${deltaClass}">${arrow}${formatNumber(Math.abs(delta))}</span>
+    </td>
+  `;
+}
+
+function getStockDelta(item, key) {
+  if (key === "stock") return item.stockDelta || 0;
+  if (key === "processingStock") return item.processingStockDelta || 0;
+  if (key === "availableStock") return item.availableStockDelta || 0;
+  return 0;
+}
+
+function recordItemEdit(item, field, beforeValue, afterValue) {
+  const beforeText = String(beforeValue ?? "").trim();
+  const afterText = String(afterValue ?? "").trim();
+  if (beforeText === afterText) return;
+  const author = getLoginUser() || "작성자 미지정";
+  item.history = normalizeItemHistory(item.history);
+  item.history.unshift({
+    id: createId(),
+    at: new Date().toISOString(),
+    author,
+    field,
+    before: beforeText,
+    after: afterText,
+  });
+  item.history = item.history.slice(0, 100);
+  addActivity("상품 수정", `${author} / ${item.code} / ${field}`);
+}
+
+function openHistoryModal(item) {
+  els.historyTitle.textContent = `${item.code} ${item.name || ""}`.trim();
+  const history = normalizeItemHistory(item.history);
+  els.historyList.innerHTML = history.length
+    ? history
+        .map(
+          (entry) => `
+            <article class="history-entry">
+              <time>${escapeHtml(formatDate(entry.at))}</time>
+              <div>
+                <strong>${escapeHtml(entry.author)} / ${escapeHtml(entry.field)}</strong>
+                <p>${escapeHtml(entry.before || "빈칸")} → ${escapeHtml(entry.after || "빈칸")}</p>
+              </div>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state"><strong>아직 수정 기록이 없습니다.</strong></div>`;
+  els.historyModal.hidden = false;
+}
+
+function closeHistoryModal() {
+  els.historyModal.hidden = true;
+}
+
+async function restoreLogin() {
+  try {
+    const response = await fetch("/api/auth/me", { headers: { Accept: "application/json" }, credentials: "same-origin" });
+    const data = response.ok ? await response.json() : { user: null };
+    setLoginUser(data.user || null);
+  } catch {
+    setLoginUser(null);
+  }
+}
+
+function getLoginUser() {
+  return currentUser?.displayName || "";
+}
+
+function hasPermission(key) {
+  if (!currentUser) return false;
+  if (currentUser.role === "admin") return true;
+  return Boolean(currentUser.permissions?.[key]);
+}
+
+function setLoginUser(user) {
+  currentUser = user || null;
+  const name = getLoginUser();
+  if (name) localStorage.setItem(AUTHOR_KEY, name);
+  els.authorInput.value = name || "";
+  els.loginBtn.textContent = name ? `${name} 로그아웃` : "로그인";
+  els.loginBtn.classList.toggle("primary", !name);
+  els.loginBtn.classList.toggle("subtle", Boolean(name));
+  if (els.adminBtn) els.adminBtn.hidden = !hasPermission("manageUsers");
+}
+
+function requireLogin(permissionKey = "") {
+  if (currentUser && (!permissionKey || hasPermission(permissionKey))) return true;
+  openLoginModal(currentUser ? "이 작업을 할 권한이 없습니다." : "수정하거나 파일을 등록하려면 먼저 로그인해주세요.");
+  return false;
+}
+
+function isLoggedIn() {
+  return Boolean(currentUser);
+}
+
+function updateLoginLockedControls() {
+  const locked = !isLoggedIn();
+  setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
+  setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
+  setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
+  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle]").forEach((control) => {
+    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/엄마코드 수정 권한이 필요합니다.");
+  });
+  document.querySelectorAll("[data-note-input]").forEach((control) => {
+    setControlLock(control, locked || !hasPermission("editMemo"), "메모 수정 권한이 필요합니다.");
+  });
+}
+
+function setControlLock(control, locked, message) {
+  if (!control) return;
+  control.disabled = locked;
+  control.title = locked ? (isLoggedIn() ? message : "로그인 후 사용할 수 있습니다.") : "";
+}
+
+async function handleLoginButton() {
+  if (currentUser) {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+    setLoginUser(null);
+    render();
+    return;
+  }
+  openLoginModal("");
+}
+
+function openLoginModal(message) {
+  els.loginMessage.textContent = message || "";
+  els.loginPassword.value = "";
+  els.loginModal.hidden = false;
+  setTimeout(() => {
+    if (!els.loginName.value) els.loginName.focus();
+    else els.loginPassword.focus();
+  }, 0);
+}
+
+function closeLoginModal() {
+  els.loginModal.hidden = true;
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const loginId = els.loginName.value.trim();
+  const password = els.loginPassword.value;
+  els.loginMessage.textContent = "로그인 확인 중...";
+  try {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ loginId, password }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      els.loginMessage.textContent = data.error || "아이디 또는 비밀번호가 맞지 않습니다.";
+      return;
+    }
+    setLoginUser(data.user);
+    closeLoginModal();
+    await bootSharedState();
+    render();
+  } catch {
+    els.loginMessage.textContent = "로그인 서버에 연결하지 못했습니다.";
+  }
+}
+
+async function openAdminModal() {
+  if (!requireLogin("manageUsers")) return;
+  els.adminModal.hidden = false;
+  els.adminMessage.textContent = "사용자 목록을 불러오는 중...";
+  try {
+    const response = await fetch("/api/admin/users", { headers: { Accept: "application/json" }, credentials: "same-origin" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "사용자 목록을 불러오지 못했습니다.");
+    els.adminUserList.innerHTML = data.users.map(renderAdminUserRow).join("");
+    els.adminMessage.textContent = "";
+  } catch (error) {
+    els.adminUserList.innerHTML = "";
+    els.adminMessage.textContent = error.message || "관리자모드를 열지 못했습니다.";
+  }
+}
+
+function closeAdminModal() {
+  els.adminModal.hidden = true;
+}
+
+function renderAdminUserRow(user) {
+  const permissionLabels = [
+    ["uploadInventory", "재고등록"],
+    ["editMemo", "메모"],
+    ["editSchedule", "입고일정"],
+    ["manageLinks", "변경코드"],
+    ["manageUsers", "사용자관리"],
+  ];
+  return `
+    <article class="admin-user-row" data-user-id="${escapeHtml(user.id)}">
+      <div class="admin-user-main">
+        <strong>${escapeHtml(user.displayName || user.loginId || "-")}</strong>
+        <span>${escapeHtml(user.loginId || "")} / ${escapeHtml(user.role || "member")}</span>
+      </div>
+      <label class="admin-check">
+        <input type="checkbox" data-admin-field="isActive" ${user.isActive ? "checked" : ""} />
+        사용
+      </label>
+      ${permissionLabels
+        .map(
+          ([key, label]) => `
+            <label class="admin-check">
+              <input type="checkbox" data-admin-field="${key}" ${user.permissions?.[key] ? "checked" : ""} />
+              ${label}
+            </label>
+          `,
+        )
+        .join("")}
+    </article>
+  `;
+}
+
+async function handleAdminPermissionChange(event) {
+  const input = event.target.closest("[data-admin-field]");
+  if (!input) return;
+  const row = input.closest("[data-user-id]");
+  if (!row) return;
+  const userId = row.dataset.userId;
+  const payload = { userId };
+  row.querySelectorAll("[data-admin-field]").forEach((field) => {
+    const name = field.dataset.adminField;
+    const serverKey = {
+      isActive: "is_active",
+      uploadInventory: "can_upload_inventory",
+      editMemo: "can_edit_memo",
+      editSchedule: "can_edit_schedule",
+      manageLinks: "can_manage_links",
+      manageUsers: "can_manage_users",
+    }[name];
+    if (serverKey) payload[serverKey] = field.checked;
+  });
+
+  els.adminMessage.textContent = "권한 저장 중...";
+  try {
+    const response = await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "권한 저장에 실패했습니다.");
+    els.adminMessage.textContent = "권한이 저장되었습니다.";
+  } catch (error) {
+    els.adminMessage.textContent = error.message || "권한 저장에 실패했습니다.";
+    input.checked = !input.checked;
+  }
+}
+
+function renderParentCodeCell(item) {
+  const label = item.parentCode ? "해제" : "지정";
+  const badge = item.parentCode ? `<span class="parent-badge">엄마코드</span>` : "";
+  return `
+    <td class="parent-code-cell">
+      ${badge}
+      <button class="parent-code-button ${item.parentCode ? "active" : ""}" data-parent-code-toggle data-code="${escapeHtml(item.code)}" type="button">${label}</button>
+    </td>
+  `;
+}
+
+function renderSimpleStatus(value) {
+  const status = normalizeSimpleStatus(value);
+  if (!status) return `<span class="simple-status simple-status-empty">-</span>`;
+  const className = status === "승인" ? "simple-status-approved" : "simple-status-hold";
+  return `<span class="simple-status ${className}">${escapeHtml(status)}</span>`;
+}
+
+function getStatus(item) {
+  if (item.parentCode) {
+    return { key: "parent", label: "엄마코드", className: "status-parent" };
+  }
+  if (item.availableStock < 0) {
+    return { key: "negative", label: "마이너스", className: "status-soldout" };
+  }
+  if (isHoldNeededItem(item)) {
+    return { key: "watch", label: "보류필요", className: "status-watch" };
+  }
+  if (hasLowStockChange(item)) {
+    return { key: "stockChange", label: "10개 미만 변동", className: "status-change" };
+  }
+  if (item.availableStock > 0 && item.availableStock <= 5) {
+    return { key: "low5", label: "5개 이하", className: "status-low5" };
+  }
+  return { key: "ok", label: "정상", className: "status-ok" };
+}
+
+function sortItems(a, b) {
+  const rank = { negative: 1, watch: 2, stockChange: 3, low5: 4, parent: 5, ok: 6 };
+  return (
+    getUrgentRank(a) - getUrgentRank(b) ||
+    getSimpleStatusRank(a) - getSimpleStatusRank(b) ||
+    (rank[a.status.key] || 9) - (rank[b.status.key] || 9) ||
+    getProductGroupKey(a).localeCompare(getProductGroupKey(b), "ko", { numeric: true }) ||
+    getCodeFamily(a.code).localeCompare(getCodeFamily(b.code), "ko", { numeric: true }) ||
+    a.code.localeCompare(b.code, "ko", { numeric: true })
+  );
+}
+
+function getUrgentRank(item) {
+  return item.status.key === "negative" ? 1 : 2;
+}
+
+function matchesActiveTab(item) {
+  if (activeTab === "all") return true;
+  if (activeTab === "stockChange") return hasLowStockChange(item);
+  if (activeTab === "low5") return !item.parentCode && item.availableStock > 0 && item.availableStock <= 5;
+  return item.status.key === activeTab;
+}
+
+function shouldShowNewAlertDot(item) {
+  if (item.parentCode) return false;
+  if (activeTab === "negative") return isNewNegativeItem(item);
+  if (activeTab === "watch") return isNewWatchItem(item);
+  return false;
+}
+
+function isNewNegativeItem(item) {
+  const previousAvailableStock = getPreviousAvailableStock(item);
+  return Number.isFinite(previousAvailableStock) && previousAvailableStock >= 0 && item.availableStock < 0;
+}
+
+function isNewWatchItem(item) {
+  if (item.status.key !== "watch") return false;
+  return !wasHoldNeededBefore(item);
+}
+
+function isHoldNeededItem(item) {
+  return (
+    normalizeSimpleStatus(item.simpleStatus) === "승인" &&
+    item.stock === 0 &&
+    item.processingStock === 0 &&
+    item.availableStock === 0
+  );
+}
+
+function wasHoldNeededBefore(item) {
+  const previousStock = Number.isFinite(item.previousStock) ? item.previousStock : item.stock;
+  const previousProcessingStock = Number.isFinite(item.previousProcessingStock) ? item.previousProcessingStock : item.processingStock;
+  const previousAvailableStock = getPreviousAvailableStock(item);
+  return (
+    normalizeSimpleStatus(item.simpleStatus) === "승인" &&
+    previousStock === 0 &&
+    previousProcessingStock === 0 &&
+    previousAvailableStock === 0
+  );
+}
+
+function getPreviousAvailableStock(item) {
+  if (Number.isFinite(item.previousAvailableStock)) return item.previousAvailableStock;
+  if (Number.isFinite(item.previousStock) && Number.isFinite(item.previousProcessingStock)) {
+    return item.previousStock - item.previousProcessingStock;
+  }
+  return NaN;
+}
+
+function hasLowStockChange(item) {
+  if (item.parentCode || item.availableStockDelta === 0) return false;
+  const previous = Number.isFinite(item.previousAvailableStock) ? item.previousAvailableStock : item.availableStock;
+  return previous < 10 || item.availableStock < 10;
+}
+
+function renderStockChangeCell(item) {
+  if (!hasLowStockChange(item)) return `<td class="change-cell muted">-</td>`;
+  const previous = item.previousAvailableStock;
+  const current = item.availableStock;
+  const delta = item.availableStockDelta;
+  const direction = delta > 0 ? "증가" : "감소";
+  const className = delta > 0 ? "change-up" : "change-down";
+  return `
+    <td class="change-cell ${className}">
+      <strong>${formatNumber(previous)} → ${formatNumber(current)}</strong>
+    </td>
+  `;
+}
+
+function formatStockChangeText(item) {
+  if (!hasLowStockChange(item)) return "";
+  const direction = item.availableStockDelta > 0 ? "증가" : "감소";
+  return `${formatNumber(item.previousAvailableStock)} → ${formatNumber(item.availableStock)} / ${formatNumber(Math.abs(item.availableStockDelta))}개 ${direction}`;
+}
+
+function getSimpleStatusRank(item) {
+  const status = normalizeSimpleStatus(item.simpleStatus);
+  if (status === "승인") return 1;
+  if (status === "보류") return 3;
+  return 2;
+}
+
+function getProductGroupKey(item) {
+  const nameKey = normalizeProductNameForGrouping(item.name);
+  if (nameKey) return nameKey;
+  return getCodeFamily(item.code);
+}
+
+function normalizeProductNameForGrouping(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/재소단|리더|심플|승인|보류/g, " ")
+    .replace(/\d{2,6}\s*(size|mm|cm|t|x|×)?/gi, " ")
+    .replace(/[a-z]?\d{2,6}[a-z]?/gi, " ")
+    .replace(/[_\-+/.,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 36);
+}
+
+function getCodeFamily(code) {
+  const text = normalizeCode(code);
+  const match = text.match(/\d+/);
+  if (!match) return text;
+  return match[0].slice(0, Math.max(2, match[0].length - 1));
+}
+
+function setTab(tab) {
+  activeTab = tab;
+  activeView = "all";
+  currentPage = 1;
+  render();
+}
+
+function setView(view) {
+  activeTab = "all";
+  activeView = VIEW_COLUMNS[view] ? view : "all";
+  currentPage = 1;
+  render();
+}
+
+async function handleFileSelection(mode) {
+  if (!requireLogin(mode === "schedule" ? "editSchedule" : "uploadInventory")) return;
+  const input = mode === "inventory" ? els.inventoryFileInput : mode === "orders" ? els.orderFileInput : els.scheduleFileInput;
+  const files = [...(input.files || [])];
+  if (!files.length) return;
+
+  try {
+    const summaries = [];
+    let lastColumns = [];
+    const importedInventoryCodes = mode === "inventory" ? new Set() : null;
+    for (const [index, file] of files.entries()) {
+      setImportMeta(mode, `파일 읽는 중... (${index + 1}/${files.length}) ${file.name}`);
+      const rows = await parseFile(file);
+      const table = rowsToTable(rows, { skipRowsAfterHeader: mode === "schedule" ? 1 : 0 });
+      const result = mode === "inventory" ? applyInventoryImport(table, file.name, importedInventoryCodes) : mode === "orders" ? applyOrderImport(table, file.name) : applyScheduleImport(table, file.name);
+      lastColumns = result.columns;
+      summaries.push(`${file.name}: ${result.summary}`);
+    }
+    if (mode === "inventory") {
+      const hidden = hideMissingInventoryItems(importedInventoryCodes);
+      if (hidden > 0) summaries.push(`이번 재고목록에 없는 기존 상품 숨김 ${hidden}개`);
+    }
+    state.lastColumns = lastColumns;
+    setImportMeta(mode, `${files.length}개 파일 반영 완료`);
+    addActivity(mode === "inventory" ? "재고목록 일괄 반영" : mode === "orders" ? "주문서 일괄 반영" : "입고일정 일괄 반영", summaries.join(" / "));
+    persist();
+    render();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setImportMeta(mode, `오류: ${message}`);
+    addActivity("파일 오류", message);
+    persist();
+    render();
+  } finally {
+    input.value = "";
+  }
+}
+
+function setImportMeta(mode, text) {
+  const target = mode === "inventory" ? els.inventoryImportMeta : mode === "orders" ? els.orderImportMeta : els.scheduleImportMeta;
+  target.textContent = text;
+}
+
+function rowsToTable(rows, options = {}) {
+  const cleanRows = rows.map((row) => row.map(normalizeCell)).filter((row) => row.some((value) => String(value).trim() !== ""));
+  if (!cleanRows.length) throw new Error("읽을 데이터가 없습니다.");
+
+  const headerIndex = findHeaderIndex(cleanRows);
+  const headers = cleanRows[headerIndex].map((header) => String(header || "").trim());
+  const records = cleanRows.slice(headerIndex + 1 + (options.skipRowsAfterHeader || 0)).map((row) => {
+    const record = {};
+    headers.forEach((header, index) => {
+      record[header || `Column ${index + 1}`] = row[index] ?? "";
+    });
+    return record;
+  });
+
+  return { headers, records };
+}
+
+function findHeaderIndex(rows) {
+  let best = 0;
+  let bestScore = -1;
+  rows.slice(0, 20).forEach((row, index) => {
+    const normalized = row.map(normalizeHeader);
+    const score =
+      Number(normalized.some((value) => ALIAS_SETS.code.has(value))) * 3 +
+      Number(normalized.some((value) => ALIAS_SETS.name.has(value))) +
+      Number(normalized.some((value) => ALIAS_SETS.stock.has(value))) * 2 +
+      Number(normalized.some((value) => ALIAS_SETS.processingStock.has(value))) * 2 +
+      Number(normalized.some((value) => ALIAS_SETS.availableStock.has(value))) * 2 +
+      Number(normalized.some((value) => ALIAS_SETS.orderQty.has(value))) * 2 +
+      Number(normalized.some((value) => ALIAS_SETS.inboundDate.has(value))) * 2 +
+      Number(normalized.some((value) => ALIAS_SETS.inboundQty.has(value))) * 2;
+    if (score > bestScore) {
+      best = index;
+      bestScore = score;
+    }
+  });
+  return best;
+}
+
+function applyInventoryImport(table, fileName, importedCodes = null) {
+  const map = getColumnMap(table.headers);
+  if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
+  if (!map.stock && !map.processingStock && !map.availableStock) {
+    throw new Error("현재고/처리중/가용재고 중 하나 이상이 필요합니다.");
+  }
+
+  const now = new Date().toISOString();
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  table.records.forEach((record) => {
+    const code = normalizeCode(record[map.code]);
+    if (!code) {
+      skipped += 1;
+      return;
+    }
+
+    const importedName = map.name ? String(record[map.name] || "").trim() : "";
+    if (importedName.includes("스크래치")) {
+      skipped += 1;
+      return;
+    }
+    if (importedCodes) importedCodes.add(code);
+
+    const existing = findItemByCode(code);
+    const stock = map.stock ? toInteger(record[map.stock], 0) : existing?.stock || 0;
+    const processingStock = map.processingStock ? toInteger(record[map.processingStock], 0) : existing?.processingStock || 0;
+    const availableStock = stock - processingStock;
+    const previousStock = existing ? existing.stock : null;
+    const stockDelta = previousStock === null ? 0 : stock - previousStock;
+    const previousProcessingStock = existing ? existing.processingStock : null;
+    const processingStockDelta = previousProcessingStock === null ? 0 : processingStock - previousProcessingStock;
+    const previousAvailableStock = existing ? existing.stock - existing.processingStock : null;
+    const availableStockDelta = previousAvailableStock === null ? 0 : availableStock - previousAvailableStock;
+    const stockChangedAt = availableStockDelta === 0 ? existing?.stockChangedAt || "" : now;
+    const simpleStatus = map.simpleStatus ? normalizeSimpleStatus(record[map.simpleStatus]) : findSimpleStatusInRecord(record);
+    const payload = {
+      code,
+      simpleStatus: simpleStatus || existing?.simpleStatus || "",
+      name: importedName || existing?.name || "",
+      stock,
+      previousStock,
+      stockDelta,
+      processingStock,
+      previousProcessingStock,
+      processingStockDelta,
+      availableStock,
+      previousAvailableStock,
+      availableStockDelta,
+      stockChangedAt,
+      inSimpleStock: true,
+      hiddenFromInventory: false,
+      source: fileName,
+      note: existing?.note || "",
+      codeChange: existing?.codeChange || "",
+      inboundDate: existing?.inboundDate || "",
+      inboundQty: existing?.inboundQty || 0,
+      parentCode: Boolean(existing?.parentCode),
+      orderQty: existing?.orderQty || 0,
+      updatedAt: now,
+    };
+
+    if (existing) {
+      Object.assign(existing, payload);
+      updated += 1;
+    } else {
+      state.items.push(cleanItem({ id: createId(), ...payload, createdAt: now }));
+      added += 1;
+    }
+  });
+
+  const summary = `추가 ${added}개, 갱신 ${updated}개, 제외 ${skipped}개`;
+  addActivity("심플 전체 재고목록 반영", `${fileName}: ${summary}`);
+  return { columns: Object.values(map), summary };
+}
+
+function hideMissingInventoryItems(importedCodes) {
+  if (!importedCodes || importedCodes.size === 0) return 0;
+  let hidden = 0;
+  state.items.forEach((item) => {
+    if (importedCodes.has(item.code)) return;
+    if (!item.inSimpleStock && !item.hiddenFromInventory) return;
+    if (!item.hiddenFromInventory) hidden += 1;
+    item.inSimpleStock = false;
+    item.hiddenFromInventory = true;
+  });
+  return hidden;
+}
+
+function isVisibleInventoryItem(item) {
+  return !item.hiddenFromInventory;
+}
+
+function applyOrderImport(table, fileName) {
+  const map = getColumnMap(table.headers);
+  if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
+  if (!map.orderQty) throw new Error("주문수량 컬럼을 찾지 못했습니다.");
+
+  const orderMap = new Map();
+  table.records.forEach((record) => {
+    const code = normalizeCode(record[map.code]);
+    if (!code) return;
+    const qty = toInteger(record[map.orderQty], 0);
+    if (qty <= 0) return;
+    const current = orderMap.get(code) || { code, name: "", qty: 0 };
+    current.qty += qty;
+    if (!current.name && map.name) current.name = String(record[map.name] || "").trim();
+    orderMap.set(code, current);
+  });
+
+  const now = new Date().toISOString();
+  let marked = 0;
+  let created = 0;
+  let totalQty = 0;
+
+  orderMap.forEach((order) => {
+    totalQty += order.qty;
+    const existing = findItemByCode(order.code);
+    if (existing) {
+      existing.orderQty = order.qty;
+      if (!existing.name && order.name) existing.name = order.name;
+      existing.updatedAt = now;
+      marked += 1;
+      return;
+    }
+
+    state.items.push({
+      id: createId(),
+      code: order.code,
+      simpleStatus: "",
+      name: order.name,
+      stock: 0,
+      processingStock: order.qty,
+      availableStock: -order.qty,
+      orderQty: order.qty,
+      inSimpleStock: false,
+      source: "",
+      note: "",
+      codeChange: "",
+      inboundDate: "",
+      inboundQty: 0,
+      parentCode: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    created += 1;
+  });
+
+  const summary = `주문서 표시 ${marked}개, 신규 확인필요 ${created}개, 주문수량 ${totalQty}개`;
+  addActivity("주문서 확인 반영", `${fileName}: ${summary}`);
+  return { columns: Object.values(map), summary };
+}
+
+function applyScheduleImport(table, fileName) {
+  const map = getColumnMap(table.headers);
+  if (!map.code) throw new Error("상품번호 컬럼을 찾지 못했습니다.");
+  if (!map.inboundDate && !map.inboundQty) throw new Error("입고일정 또는 입고수량 컬럼이 필요합니다.");
+
+  const now = new Date().toISOString();
+  let updated = 0;
+  let created = 0;
+  let skipped = 0;
+
+  table.records.forEach((record) => {
+    const code = normalizeCode(record[map.code]);
+    if (!code) {
+      skipped += 1;
+      return;
+    }
+
+    const inboundDate = map.inboundDate ? normalizeInboundDate(record[map.inboundDate]) : "";
+    const inboundQty = map.inboundQty ? toInteger(record[map.inboundQty], 0) : 0;
+    if (!inboundDate && !inboundQty) {
+      skipped += 1;
+      return;
+    }
+
+    let item = findItemByCode(code);
+    if (!item) {
+      item = cleanItem({
+        id: createId(),
+        code,
+        name: map.name ? String(record[map.name] || "").trim() : "",
+        stock: 0,
+        processingStock: 0,
+        availableStock: 0,
+        inboundDate: "",
+        inboundQty: 0,
+        inSimpleStock: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      state.items.push(item);
+      created += 1;
+    } else {
+      updated += 1;
+    }
+
+    if (map.name && !item.name) item.name = String(record[map.name] || "").trim();
+    if (map.inboundDate) {
+      recordItemEdit(item, "입고일정", item.inboundDate, inboundDate);
+      item.inboundDate = inboundDate;
+    }
+    if (map.inboundQty) {
+      recordItemEdit(item, "입고수량", item.inboundQty, inboundQty);
+      item.inboundQty = inboundQty;
+    }
+    item.updatedAt = now;
+  });
+
+  const summary = `갱신 ${updated}개, 신규 ${created}개, 제외 ${skipped}개`;
+  addActivity("입고일정 반영", `${fileName}: ${summary}`);
+  return { columns: Object.values(map), summary };
+}
+
+function getColumnMap(headers) {
+  const map = {};
+  Object.keys(ALIAS_SETS).forEach((key) => {
+    const column = findColumn(headers, ALIAS_SETS[key]);
+    if (column) map[key] = column;
+  });
+  return map;
+}
+
+function findColumn(headers, candidates) {
+  const exact = headers.find((header) => candidates.has(normalizeHeader(header)));
+  if (exact) return exact;
+  return headers.find((header) => {
+    const value = normalizeHeader(header);
+    return value && [...candidates].some((candidate) => value.includes(candidate) || candidate.includes(value));
+  });
+}
+
+function findItemByCode(code) {
+  const normalized = normalizeCode(code);
+  return state.items.find((item) => item.code === normalized);
+}
+
+function findSimpleStatusInRecord(record) {
+  return Object.values(record).map(normalizeSimpleStatus).find(Boolean) || "";
+}
+
+async function parseFile(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "csv" || extension === "tsv") {
+    const text = await file.text();
+    return parseDelimitedText(text, extension === "tsv" ? "\t" : detectDelimiter(text));
+  }
+  if (extension === "xlsx") return parseXlsx(file);
+  throw new Error("CSV, TSV, XLSX 파일만 지원합니다.");
+}
+
+function parseDelimitedText(text, delimiter) {
+  const normalized = text.replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    const next = normalized[index + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (!inQuotes && char === delimiter) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows.filter((candidate) => candidate.some((value) => String(value).trim() !== ""));
+}
+
+function detectDelimiter(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || "";
+  return [",", "\t", ";"].map((delimiter) => ({ delimiter, count: firstLine.split(delimiter).length })).sort((a, b) => b.count - a.count)[0].delimiter;
+}
+
+async function parseXlsx(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const entries = await unzip(bytes);
+  const workbookXml = decodeEntry(entries, "xl/workbook.xml");
+  const relsXml = decodeEntry(entries, "xl/_rels/workbook.xml.rels");
+  const parser = new DOMParser();
+  const workbook = parser.parseFromString(workbookXml, "application/xml");
+  const rels = parser.parseFromString(relsXml, "application/xml");
+  const sheet = workbook.getElementsByTagNameNS("*", "sheet")[0];
+  if (!sheet) throw new Error("XLSX 시트를 찾지 못했습니다.");
+  const relId = sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+  const target = findRelationshipTarget(rels, relId);
+  const sharedStrings = entries["xl/sharedStrings.xml"] ? parseSharedStrings(decodeEntry(entries, "xl/sharedStrings.xml")) : [];
+  return parseWorksheet(decodeEntry(entries, normalizeZipPath("xl", target)), sharedStrings);
+}
+
+async function unzip(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const eocdOffset = findEndOfCentralDirectory(view);
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  let pointer = view.getUint32(eocdOffset + 16, true);
+  const entries = {};
+
+  for (let index = 0; index < totalEntries; index += 1) {
+    if (view.getUint32(pointer, true) !== 0x02014b50) throw new Error("XLSX 구조를 읽지 못했습니다.");
+    const method = view.getUint16(pointer + 10, true);
+    const compressedSize = view.getUint32(pointer + 20, true);
+    const fileNameLength = view.getUint16(pointer + 28, true);
+    const extraLength = view.getUint16(pointer + 30, true);
+    const commentLength = view.getUint16(pointer + 32, true);
+    const localOffset = view.getUint32(pointer + 42, true);
+    const fileName = decodeBytes(bytes.slice(pointer + 46, pointer + 46 + fileNameLength));
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+    if (method === 0) entries[fileName] = compressed;
+    else if (method === 8) entries[fileName] = await inflateRaw(compressed);
+    pointer += 46 + fileNameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function findEndOfCentralDirectory(view) {
+  const min = Math.max(0, view.byteLength - 66000);
+  for (let offset = view.byteLength - 22; offset >= min; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) return offset;
+  }
+  throw new Error("XLSX 끝부분을 찾지 못했습니다.");
+}
+
+async function inflateRaw(bytes) {
+  if (!("DecompressionStream" in window)) throw new Error("이 브라우저는 XLSX 압축 해제를 지원하지 않습니다.");
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function decodeEntry(entries, path) {
+  const entry = entries[path];
+  if (!entry) throw new Error(`${path} 항목을 찾지 못했습니다.`);
+  return decodeBytes(entry);
+}
+
+function decodeBytes(bytes) {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function findRelationshipTarget(rels, relId) {
+  return [...rels.getElementsByTagNameNS("*", "Relationship")].find((item) => item.getAttribute("Id") === relId)?.getAttribute("Target") || "";
+}
+
+function normalizeZipPath(base, target) {
+  if (target.startsWith("/")) return target.slice(1);
+  const stack = [];
+  `${base}/${target}`.split("/").forEach((part) => {
+    if (!part || part === ".") return;
+    if (part === "..") stack.pop();
+    else stack.push(part);
+  });
+  return stack.join("/");
+}
+
+function parseSharedStrings(xml) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  return [...doc.getElementsByTagNameNS("*", "si")].map((item) => [...item.getElementsByTagNameNS("*", "t")].map((node) => node.textContent || "").join(""));
+}
+
+function parseWorksheet(xml, sharedStrings) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const rows = [];
+  [...doc.getElementsByTagNameNS("*", "row")].forEach((rowElement) => {
+    const row = [];
+    let fallbackIndex = 0;
+    [...rowElement.children].forEach((cellElement) => {
+      if (cellElement.localName !== "c") return;
+      const ref = cellElement.getAttribute("r") || "";
+      const columnIndex = ref ? columnNameToIndex(ref.replace(/[0-9]/g, "")) : fallbackIndex;
+      row[columnIndex] = readCellValue(cellElement, sharedStrings);
+      fallbackIndex = columnIndex + 1;
+    });
+    if (row.some((value) => value !== "" && value !== null && value !== undefined)) rows.push(row);
+  });
+  return rows;
+}
+
+function readCellValue(cellElement, sharedStrings) {
+  const type = cellElement.getAttribute("t");
+  if (type === "inlineStr") return [...cellElement.getElementsByTagNameNS("*", "t")].map((node) => node.textContent || "").join("");
+  const raw = cellElement.getElementsByTagNameNS("*", "v")[0]?.textContent ?? "";
+  if (type === "s") return sharedStrings[Number(raw)] || "";
+  if (type === "b") return raw === "1";
+  if (raw === "") return "";
+  const number = Number(raw);
+  return Number.isFinite(number) ? number : raw;
+}
+
+function columnNameToIndex(name) {
+  let index = 0;
+  for (const char of name.toUpperCase()) index = index * 26 + char.charCodeAt(0) - 64;
+  return Math.max(0, index - 1);
+}
+
+function renderImportPanel() {
+  els.columnChips.innerHTML = state.lastColumns.length
+    ? state.lastColumns.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")
+    : `<span class="chip">대기중</span>`;
+
+  els.activityList.innerHTML = state.activity.length
+    ? state.activity
+        .slice(0, 40)
+        .map(
+          (entry) => `
+            <article class="activity-item">
+              <time>${escapeHtml(formatDate(entry.at))}</time>
+              <div>
+                <strong>${escapeHtml(entry.title)}</strong>
+                <p>${escapeHtml(entry.detail)}</p>
+              </div>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state"><strong>처리 기록이 없습니다.</strong></div>`;
+}
+
+function addActivity(title, detail) {
+  state.activity.unshift({ id: createId(), at: new Date().toISOString(), title, detail });
+  state.activity = state.activity.slice(0, 100);
+}
+
+function clearActivity() {
+  state.activity = [];
+  persist();
+  render();
+}
+
+function clearAllData() {
+  if (!confirm("현재 저장된 재고 데이터를 모두 지울까요?")) return;
+  state = createDefaultState();
+  persist();
+  render();
+}
+
+function exportCsv() {
+  const rows = [
+    COLUMNS.map((column) => column.label),
+    ...state.items
+      .map((item) => ({ ...item, status: getStatus(item) }))
+      .sort(sortItems)
+      .map((item) => [
+        item.status.label,
+        item.code,
+        item.codeChange,
+        item.parentCode ? "엄마코드" : "",
+        item.simpleStatus,
+        item.name,
+        item.stock,
+        item.processingStock,
+        item.availableStock,
+        item.inboundDate,
+        item.inboundQty,
+        item.orderQty,
+        item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
+        item.note,
+        formatHistoryForCsv(item.history),
+        formatDate(item.updatedAt),
+      ]),
+  ];
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `jaesodan_inventory_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadScheduleTemplate() {
+  const link = document.createElement("a");
+  link.href = "/입고일정_등록양식.xlsx";
+  link.download = "입고일정_등록양식.xlsx";
+  link.click();
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function normalizeHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-()[\]{}.:/\\]/g, "");
+}
+
+function normalizeCode(value) {
+  const text = String(value ?? "").trim();
+  return /^\d+\.0$/.test(text) ? text.slice(0, -2) : text.toUpperCase();
+}
+
+function normalizeSimpleStatus(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (text.includes("승인")) return "승인";
+  if (text.includes("보류")) return "보류";
+  return "";
+}
+
+function normalizeSearch(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeCell(value) {
+  return typeof value === "string" ? value.trim() : value ?? "";
+}
+
+function normalizeInboundDate(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const date = new Date(Date.UTC(1899, 11, 30 + Math.trunc(value)));
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}.${month}.${day}`;
+  }
+
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const match = text.match(/^(\d{2,4})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/);
+  if (!match) return text;
+  const year = match[1].length === 2 ? `20${match[1]}` : match[1];
+  const month = String(Number(match[2])).padStart(2, "0");
+  const day = String(Number(match[3])).padStart(2, "0");
+  return `${year}.${month}.${day}`;
+}
+
+function toInteger(value, fallback) {
+  const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+}
+
+function toOptionalInteger(value) {
+  const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function normalizeItemHistory(value) {
+  return Array.isArray(value)
+    ? value
+        .slice(0, 100)
+        .map((entry) => ({
+          id: String(entry?.id || createId()),
+          at: entry?.at || new Date().toISOString(),
+          author: String(entry?.author || "작성자 미지정").trim(),
+          field: String(entry?.field || "").trim(),
+          before: String(entry?.before || "").trim(),
+          after: String(entry?.after || "").trim(),
+        }))
+        .filter((entry) => entry.field)
+    : [];
+}
+
+function formatHistoryForCsv(history) {
+  return normalizeItemHistory(history)
+    .map((entry) => `${formatDate(entry.at)} / ${entry.author} / ${entry.field} / ${entry.before || "빈칸"} → ${entry.after || "빈칸"}`)
+    .join(" | ");
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${year}.${month}.${day} ${hour}:${minute}`;
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function createXlsxBlob(rows) {
+  const entries = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="입고일정" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`,
+    "xl/worksheets/sheet1.xml": createWorksheetXml(rows),
+  };
+  return new Blob([createZip(entries)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+function createWorksheetXml(rows) {
+  const body = rows
+    .map((row, rowIndex) => {
+      const cells = row
+        .map((value, columnIndex) => {
+          const ref = `${columnIndexToName(columnIndex)}${rowIndex + 1}`;
+          return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    })
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>${body}</sheetData>
+</worksheet>`;
+}
+
+function createZip(entries) {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+
+  Object.entries(entries).forEach(([name, content]) => {
+    const nameBytes = encoder.encode(name);
+    const data = encoder.encode(content);
+    const crc = crc32(data);
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localHeader.set(nameBytes, 30);
+    chunks.push(localHeader, data);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, data.length, true);
+    centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+    central.push(centralHeader);
+    offset += localHeader.length + data.length;
+  });
+
+  const centralSize = central.reduce((sum, item) => sum + item.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, central.length, true);
+  endView.setUint16(10, central.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, offset, true);
+  return new Blob([...chunks, ...central, end]);
+}
+
+function crc32(bytes) {
+  let crc = -1;
+  for (const byte of bytes) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ byte) & 0xff];
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+function columnIndexToName(index) {
+  let name = "";
+  let current = index + 1;
+  while (current > 0) {
+    const mod = (current - 1) % 26;
+    name = String.fromCharCode(65 + mod) + name;
+    current = Math.floor((current - mod) / 26);
+  }
+  return name;
+}
+
+function escapeXml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let value = i;
+    for (let j = 0; j < 8; j += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[i] = value >>> 0;
+  }
+  return table;
+})();
+
+function createId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}

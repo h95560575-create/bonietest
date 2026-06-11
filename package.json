@@ -1,0 +1,12 @@
+{
+  "name": "discontinued-inventory-webapp",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "upload:state": "node scripts/upload-local-state.js"
+  }
+}
