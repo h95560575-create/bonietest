@@ -30,7 +30,7 @@ const COLUMNS = [
 
 const VIEW_COLUMNS = {
   core: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
-  stock: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt"],
+  stock: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
   catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "note", "history"],
   depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
   all: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
@@ -388,7 +388,7 @@ function render() {
   });
 
   document.querySelectorAll("[data-view]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === activeView);
+    button.classList.toggle("active", activeTab === "all" && button.dataset.view === activeView);
   });
 
   els.inventoryPanel.hidden = activeTab === "import";
