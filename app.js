@@ -8,12 +8,16 @@ const COLUMNS = [
   { key: "status", label: "상태" },
   { key: "code", label: "상품코드" },
   { key: "codeChange", label: "변경코드" },
-  { key: "parentCode", label: "엄마코드" },
+  { key: "parentCode", label: "메인코드" },
+  { key: "mainCode", label: "소속 메인코드" },
   { key: "simpleStatus", label: "심플상태" },
   { key: "name", label: "상품명" },
   { key: "stock", label: "현재고" },
   { key: "processingStock", label: "처리중" },
   { key: "availableStock", label: "가용재고" },
+  { key: "depletionEstimate", label: "소진예상" },
+  { key: "depletionRate", label: "최근속도" },
+  { key: "depletionDate", label: "예상일" },
   { key: "inboundDate", label: "입고일정" },
   { key: "inboundQty", label: "입고수량" },
   { key: "orderQty", label: "주문서수량" },
@@ -24,10 +28,11 @@ const COLUMNS = [
 ];
 
 const VIEW_COLUMNS = {
-  core: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
-  stock: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt"],
-  catalog: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
-  all: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  core: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  stock: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt"],
+  catalog: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
+  all: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
 const HEADER_ALIASES = {
@@ -219,7 +224,7 @@ function normalizeState(snapshot) {
   }
   return {
     items,
-    activity: Array.isArray(snapshot?.activity) ? snapshot.activity.slice(0, 100) : [],
+    activity: Array.isArray(snapshot?.activity) ? snapshot.activity.slice(0, 100).map(normalizeActivityEntry) : [],
     lastColumns: Array.isArray(snapshot?.lastColumns) ? snapshot.lastColumns.map(String).slice(0, 30) : [],
     memoResetVersion: 1,
   };
@@ -233,6 +238,8 @@ function cleanItem(item) {
     code,
     codeChange: String(item.codeChange || "").trim(),
     parentCode: Boolean(item.parentCode),
+    mainCode: normalizeCode(item.mainCode),
+    inventoryOrder: toInteger(item.inventoryOrder, 999999),
     simpleStatus: normalizeSimpleStatus(item.simpleStatus),
     name: String(item.name || "").trim(),
     stock: toInteger(item.stock, 0),
@@ -244,6 +251,7 @@ function cleanItem(item) {
     availableStock: toInteger(item.stock, 0) - toInteger(item.processingStock, 0),
     previousAvailableStock: toOptionalInteger(item.previousAvailableStock),
     availableStockDelta: toInteger(item.availableStockDelta, 0),
+    previousStockChangedAt: item.previousStockChangedAt || "",
     stockChangedAt: item.stockChangedAt || "",
     inboundDate: String(item.inboundDate || "").trim(),
     inboundQty: toInteger(item.inboundQty, 0),
@@ -451,9 +459,9 @@ function getVisibleColumns() {
 
 function getColumnHeaderClass(key) {
   if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
-  if (["status", "parentCode", "simpleStatus", "history"].includes(key)) return "center-head";
-  if (["inboundDate", "updatedAt"].includes(key)) return "date-head";
-  if (key === "codeChange") return "code-change-head";
+  if (["status", "parentCode", "mainCode", "simpleStatus", "history"].includes(key)) return "center-head";
+  if (["inboundDate", "updatedAt", "depletionDate"].includes(key)) return "date-head";
+  if (key === "codeChange" || key === "mainCode") return "code-change-head";
   if (key === "code") return "code-head";
   return "";
 }
@@ -465,8 +473,12 @@ function renderCell(item, column) {
   if (column.key === "code") return `<td class="code-cell">${escapeHtml(item.code)}</td>`;
   if (column.key === "codeChange") return renderCodeChangeCell(item);
   if (column.key === "parentCode") return renderParentCodeCell(item);
+  if (column.key === "mainCode") return renderMainCodeCell(item);
   if (column.key === "simpleStatus") return `<td>${renderSimpleStatus(item.simpleStatus)}</td>`;
   if (column.key === "name") return renderNameCell(item);
+  if (column.key === "depletionEstimate") return renderDepletionEstimateCell(item);
+  if (column.key === "depletionRate") return renderDepletionRateCell(item);
+  if (column.key === "depletionDate") return renderDepletionDateCell(item);
   if (["stock", "processingStock", "availableStock", "orderQty", "inboundQty"].includes(column.key)) {
     const value = column.key === "availableStock" ? item.stock - item.processingStock : item[column.key] || 0;
     if (["stock", "processingStock", "availableStock"].includes(column.key)) {
@@ -490,10 +502,12 @@ function renderCell(item, column) {
 
 function renderNameCell(item) {
   const hasDot = shouldShowNewAlertDot(item);
+  const isSubCode = Boolean(item.mainCode && item.mainCode !== item.code);
   return `
-    <td class="name-cell ${hasDot ? "has-new-alert" : ""}">
+    <td class="name-cell ${hasDot ? "has-new-alert" : ""} ${isSubCode ? "is-sub-code" : ""}">
       <div class="name-line">
         ${hasDot ? `<span class="new-alert-dot" title="새로 생긴 주의 품목" aria-label="새로 생긴 주의 품목"></span>` : ""}
+        ${isSubCode ? `<span class="sub-code-mark">ㄴ</span>` : ""}
         <strong>${escapeHtml(item.name || "-")}</strong>
       </div>
     </td>
@@ -501,7 +515,7 @@ function renderNameCell(item) {
 }
 
 function handleTableEdit(event) {
-  if (!event.target.matches("[data-note-input], [data-code-change-input]")) return;
+  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input]")) return;
   const permissionKey = event.target.matches("[data-note-input]") ? "editMemo" : "manageLinks";
   if (!requireLogin(permissionKey)) {
     render();
@@ -514,9 +528,15 @@ function handleTableEdit(event) {
     recordItemEdit(item, "메모", item.note, nextValue);
     item.note = nextValue;
   } else {
-    const nextValue = event.target.value.trim();
-    recordItemEdit(item, "변경코드", item.codeChange, nextValue);
-    item.codeChange = nextValue;
+    const nextValue = event.target.matches("[data-main-code-input]") ? normalizeCode(event.target.value) : event.target.value.trim();
+    if (event.target.matches("[data-main-code-input]")) {
+      const safeValue = nextValue === item.code ? "" : nextValue;
+      recordItemEdit(item, "소속 메인코드", item.mainCode, safeValue);
+      item.mainCode = safeValue;
+    } else {
+      recordItemEdit(item, "변경코드", item.codeChange, nextValue);
+      item.codeChange = nextValue;
+    }
   }
   item.updatedAt = new Date().toISOString();
   persist();
@@ -527,6 +547,14 @@ function renderCodeChangeCell(item) {
   return `
     <td class="code-change-cell">
       <input data-code-change-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.codeChange || "")}" placeholder="예: 7004" />
+    </td>
+  `;
+}
+
+function renderMainCodeCell(item) {
+  return `
+    <td class="main-code-cell">
+      <input data-main-code-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.mainCode || "")}" placeholder="예: 9452" />
     </td>
   `;
 }
@@ -545,8 +573,9 @@ function handleTableClick(event) {
   const item = findItemByCode(button.dataset.code);
   if (!item) return;
   const nextValue = !item.parentCode;
-  recordItemEdit(item, "엄마코드", item.parentCode ? "지정" : "미지정", nextValue ? "지정" : "미지정");
+  recordItemEdit(item, "메인코드", item.parentCode ? "지정" : "미지정", nextValue ? "지정" : "미지정");
   item.parentCode = !item.parentCode;
+  if (item.parentCode && item.mainCode === item.code) item.mainCode = "";
   item.updatedAt = new Date().toISOString();
   persist();
   render();
@@ -579,6 +608,67 @@ function getStockDelta(item, key) {
   if (key === "processingStock") return item.processingStockDelta || 0;
   if (key === "availableStock") return item.availableStockDelta || 0;
   return 0;
+}
+
+function renderDepletionEstimateCell(item) {
+  const estimate = getDepletionEstimate(item);
+  return `
+    <td class="depletion-cell ${estimate.className}">
+      <strong>${escapeHtml(estimate.label)}</strong>
+      <span>${escapeHtml(estimate.detail)}</span>
+    </td>
+  `;
+}
+
+function renderDepletionRateCell(item) {
+  const estimate = getDepletionEstimate(item);
+  return `<td class="depletion-rate-cell ${estimate.className}">${escapeHtml(estimate.rateText)}</td>`;
+}
+
+function renderDepletionDateCell(item) {
+  const estimate = getDepletionEstimate(item);
+  return `<td class="date-cell ${estimate.className}">${escapeHtml(estimate.dateText)}</td>`;
+}
+
+function getDepletionEstimate(item) {
+  const availableStock = item.stock - item.processingStock;
+  if (item.parentCode) return createDepletionResult("메인코드", "구성품 재고 확인", "-", "-", "depletion-muted");
+  if (availableStock <= 0) return createDepletionResult("이미 0 이하", "즉시 확인", "-", "현재", "depletion-danger");
+
+  const delta = Number(item.availableStockDelta || 0);
+  if (delta > 0) return createDepletionResult("증가중", `최근 +${formatNumber(delta)}개`, `+${formatNumber(delta)}개`, "-", "depletion-up");
+  if (delta === 0) return createDepletionResult("변동없음", "최근 감소 없음", "0개", "-", "depletion-muted");
+
+  const previousAt = parseDateValue(item.previousStockChangedAt || item.createdAt);
+  const changedAt = parseDateValue(item.stockChangedAt || item.updatedAt);
+  const elapsedDays = previousAt && changedAt ? Math.max(1, Math.round((changedAt - previousAt) / 86400000)) : 0;
+  if (!elapsedDays) return createDepletionResult("계산대기", "다음 재고 등록 후 계산", `${formatNumber(delta)}개`, "-", "depletion-muted");
+
+  const dailyDecrease = Math.abs(delta) / elapsedDays;
+  if (dailyDecrease <= 0) return createDepletionResult("계산대기", "감소 속도 없음", "0개/일", "-", "depletion-muted");
+
+  const daysLeft = Math.max(1, Math.ceil(availableStock / dailyDecrease));
+  const expectedDate = new Date(changedAt.getTime() + daysLeft * 86400000);
+  const className = daysLeft <= 3 ? "depletion-danger" : daysLeft <= 7 ? "depletion-warning" : daysLeft <= 14 ? "depletion-caution" : "depletion-ok";
+  return createDepletionResult(`${formatNumber(daysLeft)}일 후`, `0개 예상`, `${formatNumber(dailyDecrease.toFixed(1))}개/일 감소`, formatShortDate(expectedDate), className);
+}
+
+function createDepletionResult(label, detail, rateText, dateText, className) {
+  return { label, detail, rateText, dateText, className };
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatShortDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}.${day}`;
 }
 
 function recordItemEdit(item, field, beforeValue, afterValue) {
@@ -670,8 +760,8 @@ function updateLoginLockedControls() {
   setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
   setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
   setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
-  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle]").forEach((control) => {
-    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/엄마코드 수정 권한이 필요합니다.");
+  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input]").forEach((control) => {
+    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/메인코드 수정 권한이 필요합니다.");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
     setControlLock(control, locked || !hasPermission("editMemo"), "메모 수정 권한이 필요합니다.");
@@ -825,7 +915,7 @@ async function handleAdminPermissionChange(event) {
 
 function renderParentCodeCell(item) {
   const label = item.parentCode ? "해제" : "지정";
-  const badge = item.parentCode ? `<span class="parent-badge">엄마코드</span>` : "";
+  const badge = item.parentCode ? `<span class="parent-badge">메인코드</span>` : "";
   return `
     <td class="parent-code-cell">
       ${badge}
@@ -843,7 +933,7 @@ function renderSimpleStatus(value) {
 
 function getStatus(item) {
   if (item.parentCode) {
-    return { key: "parent", label: "엄마코드", className: "status-parent" };
+    return { key: "parent", label: "메인코드", className: "status-parent" };
   }
   if (item.availableStock < 0) {
     return { key: "negative", label: "마이너스", className: "status-soldout" };
@@ -862,14 +952,40 @@ function getStatus(item) {
 
 function sortItems(a, b) {
   const rank = { negative: 1, watch: 2, stockChange: 3, low5: 4, parent: 5, ok: 6 };
+  const groupSort =
+    getMainGroupOrder(a) - getMainGroupOrder(b) ||
+    getMainGroupCode(a).localeCompare(getMainGroupCode(b), "ko", { numeric: true }) ||
+    getMainSubRank(a) - getMainSubRank(b) ||
+    getInventoryOrder(a) - getInventoryOrder(b) ||
+    a.code.localeCompare(b.code, "ko", { numeric: true });
+  if (activeTab === "all") return groupSort;
   return (
     getUrgentRank(a) - getUrgentRank(b) ||
     getSimpleStatusRank(a) - getSimpleStatusRank(b) ||
     (rank[a.status.key] || 9) - (rank[b.status.key] || 9) ||
-    getProductGroupKey(a).localeCompare(getProductGroupKey(b), "ko", { numeric: true }) ||
-    getCodeFamily(a.code).localeCompare(getCodeFamily(b.code), "ko", { numeric: true }) ||
-    a.code.localeCompare(b.code, "ko", { numeric: true })
+    groupSort
   );
+}
+
+function getMainGroupCode(item) {
+  return item.mainCode || item.code;
+}
+
+function getMainGroupOrder(item) {
+  const mainCode = getMainGroupCode(item);
+  const mainItem = findItemByCode(mainCode);
+  return getInventoryOrder(mainItem || item);
+}
+
+function getInventoryOrder(item) {
+  const order = Number(item?.inventoryOrder);
+  return Number.isFinite(order) ? order : 999999;
+}
+
+function getMainSubRank(item) {
+  if (item.parentCode) return 0;
+  if (item.mainCode) return 1;
+  return 2;
 }
 
 function getUrgentRank(item) {
@@ -982,6 +1098,10 @@ function normalizeProductNameForGrouping(value) {
     .slice(0, 36);
 }
 
+function isSubCodeName(value) {
+  return String(value || "").trim().startsWith("ㄴ");
+}
+
 function getCodeFamily(code) {
   const text = normalizeCode(code);
   const match = text.match(/\d+/);
@@ -1013,11 +1133,12 @@ async function handleFileSelection(mode) {
     const summaries = [];
     let lastColumns = [];
     const importedInventoryCodes = mode === "inventory" ? new Set() : null;
+    const inventoryImportContext = mode === "inventory" ? { order: 0 } : null;
     for (const [index, file] of files.entries()) {
       setImportMeta(mode, `파일 읽는 중... (${index + 1}/${files.length}) ${file.name}`);
       const rows = await parseFile(file);
       const table = rowsToTable(rows, { skipRowsAfterHeader: mode === "schedule" ? 1 : 0 });
-      const result = mode === "inventory" ? applyInventoryImport(table, file.name, importedInventoryCodes) : mode === "orders" ? applyOrderImport(table, file.name) : applyScheduleImport(table, file.name);
+      const result = mode === "inventory" ? applyInventoryImport(table, file.name, importedInventoryCodes, inventoryImportContext) : mode === "orders" ? applyOrderImport(table, file.name) : applyScheduleImport(table, file.name);
       lastColumns = result.columns;
       summaries.push(`${file.name}: ${result.summary}`);
     }
@@ -1085,7 +1206,7 @@ function findHeaderIndex(rows) {
   return best;
 }
 
-function applyInventoryImport(table, fileName, importedCodes = null) {
+function applyInventoryImport(table, fileName, importedCodes = null, importContext = null) {
   const map = getColumnMap(table.headers);
   if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
   if (!map.stock && !map.processingStock && !map.availableStock) {
@@ -1096,6 +1217,7 @@ function applyInventoryImport(table, fileName, importedCodes = null) {
   let added = 0;
   let updated = 0;
   let skipped = 0;
+  let currentMainCode = "";
 
   table.records.forEach((record) => {
     const code = normalizeCode(record[map.code]);
@@ -1112,6 +1234,10 @@ function applyInventoryImport(table, fileName, importedCodes = null) {
     if (importedCodes) importedCodes.add(code);
 
     const existing = findItemByCode(code);
+    const isSubCode = isSubCodeName(importedName);
+    const inferredMainCode = isSubCode ? currentMainCode : "";
+    const mainCode = normalizeCode(existing?.mainCode || inferredMainCode);
+    const inventoryOrder = importContext ? importContext.order++ : getInventoryOrder(existing);
     const stock = map.stock ? toInteger(record[map.stock], 0) : existing?.stock || 0;
     const processingStock = map.processingStock ? toInteger(record[map.processingStock], 0) : existing?.processingStock || 0;
     const availableStock = stock - processingStock;
@@ -1121,6 +1247,7 @@ function applyInventoryImport(table, fileName, importedCodes = null) {
     const processingStockDelta = previousProcessingStock === null ? 0 : processingStock - previousProcessingStock;
     const previousAvailableStock = existing ? existing.stock - existing.processingStock : null;
     const availableStockDelta = previousAvailableStock === null ? 0 : availableStock - previousAvailableStock;
+    const previousStockChangedAt = existing?.stockChangedAt || existing?.updatedAt || "";
     const stockChangedAt = availableStockDelta === 0 ? existing?.stockChangedAt || "" : now;
     const simpleStatus = map.simpleStatus ? normalizeSimpleStatus(record[map.simpleStatus]) : findSimpleStatusInRecord(record);
     const payload = {
@@ -1136,6 +1263,7 @@ function applyInventoryImport(table, fileName, importedCodes = null) {
       availableStock,
       previousAvailableStock,
       availableStockDelta,
+      previousStockChangedAt,
       stockChangedAt,
       inSimpleStock: true,
       hiddenFromInventory: false,
@@ -1145,6 +1273,8 @@ function applyInventoryImport(table, fileName, importedCodes = null) {
       inboundDate: existing?.inboundDate || "",
       inboundQty: existing?.inboundQty || 0,
       parentCode: Boolean(existing?.parentCode),
+      mainCode: mainCode === code ? "" : mainCode,
+      inventoryOrder,
       orderQty: existing?.orderQty || 0,
       updatedAt: now,
     };
@@ -1155,6 +1285,13 @@ function applyInventoryImport(table, fileName, importedCodes = null) {
     } else {
       state.items.push(cleanItem({ id: createId(), ...payload, createdAt: now }));
       added += 1;
+    }
+
+    if (!isSubCode) {
+      currentMainCode = code;
+    } else if (payload.mainCode) {
+      const mainItem = findItemByCode(payload.mainCode);
+      if (mainItem) mainItem.parentCode = true;
     }
   });
 
@@ -1229,6 +1366,8 @@ function applyOrderImport(table, fileName) {
       inboundDate: "",
       inboundQty: 0,
       parentCode: false,
+      mainCode: "",
+      inventoryOrder: 999999,
       createdAt: now,
       updatedAt: now,
     });
@@ -1552,24 +1691,31 @@ function exportCsv() {
     ...state.items
       .map((item) => ({ ...item, status: getStatus(item) }))
       .sort(sortItems)
-      .map((item) => [
-        item.status.label,
-        item.code,
-        item.codeChange,
-        item.parentCode ? "엄마코드" : "",
-        item.simpleStatus,
-        item.name,
-        item.stock,
-        item.processingStock,
-        item.availableStock,
-        item.inboundDate,
-        item.inboundQty,
-        item.orderQty,
-        item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
-        item.note,
-        formatHistoryForCsv(item.history),
-        formatDate(item.updatedAt),
-      ]),
+      .map((item) => {
+        const depletion = getDepletionEstimate(item);
+        return [
+          item.status.label,
+          item.code,
+          item.codeChange,
+          item.parentCode ? "메인코드" : "",
+          item.mainCode,
+          item.simpleStatus,
+          item.name,
+          item.stock,
+          item.processingStock,
+          item.availableStock,
+          depletion.label,
+          depletion.rateText,
+          depletion.dateText,
+          item.inboundDate,
+          item.inboundQty,
+          item.orderQty,
+          item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
+          item.note,
+          formatHistoryForCsv(item.history),
+          formatDate(item.updatedAt),
+        ];
+      }),
   ];
   const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -1658,12 +1804,25 @@ function normalizeItemHistory(value) {
           id: String(entry?.id || createId()),
           at: entry?.at || new Date().toISOString(),
           author: String(entry?.author || "작성자 미지정").trim(),
-          field: String(entry?.field || "").trim(),
-          before: String(entry?.before || "").trim(),
-          after: String(entry?.after || "").trim(),
+          field: renameLegacyMainCodeText(entry?.field),
+          before: renameLegacyMainCodeText(entry?.before),
+          after: renameLegacyMainCodeText(entry?.after),
         }))
         .filter((entry) => entry.field)
     : [];
+}
+
+function normalizeActivityEntry(entry) {
+  return {
+    id: String(entry?.id || createId()),
+    at: entry?.at || new Date().toISOString(),
+    title: renameLegacyMainCodeText(entry?.title).slice(0, 80),
+    detail: renameLegacyMainCodeText(entry?.detail).slice(0, 500),
+  };
+}
+
+function renameLegacyMainCodeText(value) {
+  return String(value || "").replace(/엄마코드/g, "메인코드").replace(/엄마/g, "메인");
 }
 
 function formatHistoryForCsv(history) {

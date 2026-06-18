@@ -1,4 +1,4 @@
-# 재소단 재고관리 웹앱 배포 안내
+﻿# 재소단 재고관리 웹앱 배포 안내
 
 ## 0. 중요한 원칙
 
@@ -54,7 +54,7 @@ NODE_ENV=production
 - `can_upload_inventory`: 재고목록/주문서 등록
 - `can_edit_memo`: 메모 수정
 - `can_edit_schedule`: 입고일정/입고수량 수정
-- `can_manage_links`: 변경코드/엄마코드 수정
+- `can_manage_links`: 변경코드/메인코드 수정
 - `can_manage_users`: 관리자모드에서 사용자 권한 수정
 
 ## 6. 기존 로컬 데이터 옮기기

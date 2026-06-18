@@ -20,6 +20,8 @@ const itemFields = [
   { key: "code", type: "code" },
   { key: "codeChange", type: "text" },
   { key: "parentCode", type: "boolean" },
+  { key: "mainCode", type: "code" },
+  { key: "inventoryOrder", type: "number" },
   { key: "simpleStatus", type: "simpleStatus" },
   { key: "name", type: "text" },
   { key: "stock", type: "number" },
@@ -31,6 +33,7 @@ const itemFields = [
   { key: "availableStock", type: "signedNumber" },
   { key: "previousAvailableStock", type: "optionalSignedNumber" },
   { key: "availableStockDelta", type: "signedNumber" },
+  { key: "previousStockChangedAt", type: "text" },
   { key: "stockChangedAt", type: "text" },
   { key: "inboundDate", type: "text" },
   { key: "inboundQty", type: "number" },
@@ -335,8 +338,8 @@ function sanitizeState(input) {
           .map((entry) => ({
             id: String(entry?.id || crypto.randomUUID()),
             at: validDateOr(entry?.at, now),
-            title: String(entry?.title || "").slice(0, 80),
-            detail: String(entry?.detail || "").slice(0, 500),
+            title: renameLegacyMainCodeText(entry?.title).slice(0, 80),
+            detail: renameLegacyMainCodeText(entry?.detail).slice(0, 500),
           }))
           .filter((entry) => entry.title || entry.detail)
       : [],
@@ -368,12 +371,16 @@ function sanitizeHistory(value) {
           id: String(entry?.id || crypto.randomUUID()),
           at: validDateOr(entry?.at, now),
           author: String(entry?.author || "작성자 미확인").slice(0, 40),
-          field: String(entry?.field || "").slice(0, 40),
-          before: String(entry?.before || "").slice(0, 300),
-          after: String(entry?.after || "").slice(0, 300),
+          field: renameLegacyMainCodeText(entry?.field).slice(0, 40),
+          before: renameLegacyMainCodeText(entry?.before).slice(0, 300),
+          after: renameLegacyMainCodeText(entry?.after).slice(0, 300),
         }))
         .filter((entry) => entry.field)
     : [];
+}
+
+function renameLegacyMainCodeText(value) {
+  return String(value || "").trim().replace(/엄마코드/g, "메인코드").replace(/엄마/g, "메인");
 }
 
 function sanitizeProfilePatch(input) {
@@ -401,7 +408,7 @@ function assertCanWriteState(previousState, nextState, profile) {
       requireProfilePermission(profile, "can_upload_inventory");
       continue;
     }
-    if (changedAny(before, after, ["stock", "previousStock", "stockDelta", "processingStock", "previousProcessingStock", "processingStockDelta", "availableStock", "previousAvailableStock", "availableStockDelta", "stockChangedAt", "simpleStatus", "name", "orderQty", "inSimpleStock", "hiddenFromInventory", "source"])) {
+    if (changedAny(before, after, ["stock", "previousStock", "stockDelta", "processingStock", "previousProcessingStock", "processingStockDelta", "availableStock", "previousAvailableStock", "availableStockDelta", "previousStockChangedAt", "stockChangedAt", "simpleStatus", "name", "orderQty", "inSimpleStock", "hiddenFromInventory", "source", "inventoryOrder"])) {
       requireProfilePermission(profile, "can_upload_inventory");
     }
     if (changedAny(before, after, ["note"])) {
@@ -410,7 +417,7 @@ function assertCanWriteState(previousState, nextState, profile) {
     if (changedAny(before, after, ["inboundDate", "inboundQty"])) {
       requireProfilePermission(profile, "can_edit_schedule");
     }
-    if (changedAny(before, after, ["codeChange", "parentCode"])) {
+    if (changedAny(before, after, ["codeChange", "parentCode", "mainCode"])) {
       requireProfilePermission(profile, "can_manage_links");
     }
   }

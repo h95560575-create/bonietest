@@ -158,6 +158,7 @@ h1 {
 
 .button:disabled,
 .code-change-cell input:disabled,
+.main-code-cell input:disabled,
 .note-cell textarea:disabled,
 .parent-code-button:disabled {
   cursor: not-allowed;
@@ -165,6 +166,7 @@ h1 {
 }
 
 .code-change-cell input:disabled,
+.main-code-cell input:disabled,
 .note-cell textarea:disabled {
   background: #f2f4f6;
   color: var(--muted-2);
@@ -419,12 +421,14 @@ tbody tr:hover td {
   white-space: nowrap;
 }
 
-.code-change-cell {
+.code-change-cell,
+.main-code-cell {
   min-width: 82px;
   max-width: 92px;
 }
 
-.code-change-cell input {
+.code-change-cell input,
+.main-code-cell input {
   display: block;
   width: 100%;
   height: 34px;
@@ -439,10 +443,16 @@ tbody tr:hover td {
   text-align: center;
 }
 
-.code-change-cell input:focus {
+.code-change-cell input:focus,
+.main-code-cell input:focus {
   border-color: var(--blue);
   background: #fff;
   box-shadow: 0 0 0 3px rgba(25, 167, 245, 0.14);
+}
+
+.main-code-cell {
+  min-width: 104px;
+  max-width: 116px;
 }
 
 .name-cell {
@@ -452,13 +462,27 @@ tbody tr:hover td {
 
 .name-line {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: start;
   column-gap: 7px;
 }
 
-.name-cell:not(.has-new-alert) .name-line {
+.name-cell:not(.has-new-alert):not(.is-sub-code) .name-line {
   display: block;
+}
+
+.sub-code-mark {
+  display: inline-flex;
+  width: 18px;
+  color: var(--muted);
+  font-weight: 900;
+  line-height: 1.4;
+  justify-content: center;
+}
+
+.name-cell.is-sub-code strong {
+  color: var(--ink-soft);
+  font-weight: 800;
 }
 
 .new-alert-dot {
@@ -569,6 +593,73 @@ tbody tr:hover td {
 
 .change-down {
   color: var(--danger);
+}
+
+.depletion-cell {
+  min-width: 118px;
+  white-space: nowrap;
+}
+
+.depletion-cell strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.depletion-cell span,
+.depletion-rate-cell {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.depletion-rate-cell {
+  min-width: 108px;
+  white-space: nowrap;
+}
+
+.depletion-danger,
+.depletion-danger strong,
+.depletion-danger.depletion-rate-cell,
+.date-cell.depletion-danger {
+  color: var(--danger);
+}
+
+.depletion-warning,
+.depletion-warning strong,
+.depletion-warning.depletion-rate-cell,
+.date-cell.depletion-warning {
+  color: #d25b00;
+}
+
+.depletion-caution,
+.depletion-caution strong,
+.depletion-caution.depletion-rate-cell,
+.date-cell.depletion-caution {
+  color: #9b6a00;
+}
+
+.depletion-ok,
+.depletion-ok strong,
+.depletion-ok.depletion-rate-cell,
+.date-cell.depletion-ok {
+  color: var(--ink);
+}
+
+.depletion-up,
+.depletion-up strong,
+.depletion-up.depletion-rate-cell,
+.date-cell.depletion-up {
+  color: var(--blue-strong);
+}
+
+.depletion-muted,
+.depletion-muted strong,
+.depletion-muted.depletion-rate-cell,
+.date-cell.depletion-muted {
+  color: var(--muted-2);
 }
 
 .note-cell {
