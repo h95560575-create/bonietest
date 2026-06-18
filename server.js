@@ -41,6 +41,7 @@ const itemFields = [
   { key: "inSimpleStock", type: "boolean" },
   { key: "hiddenFromInventory", type: "boolean" },
   { key: "source", type: "text" },
+  { key: "salesLinks", type: "salesLinks" },
   { key: "note", type: "text" },
   { key: "history", type: "history" },
 ];
@@ -359,7 +360,23 @@ function sanitizeItemField(value, field) {
   if (field.type === "code") return normalizeCode(value);
   if (field.type === "simpleStatus") return normalizeSimpleStatus(value);
   if (field.type === "history") return sanitizeHistory(value);
+  if (field.type === "salesLinks") return sanitizeSalesLinks(value);
   return String(value || "").trim();
+}
+
+function sanitizeSalesLinks(value) {
+  return Array.isArray(value)
+    ? value
+        .slice(0, 20)
+        .map((entry) => ({
+          id: String(entry?.id || crypto.randomUUID()),
+          platform: String(entry?.platform || "").trim().slice(0, 80),
+          productName: String(entry?.productName || "").trim().slice(0, 160),
+          qty: String(entry?.qty || "").trim().slice(0, 20),
+          url: String(entry?.url || "").trim().slice(0, 500),
+        }))
+        .filter((entry) => entry.platform || entry.productName || entry.qty || entry.url)
+    : [];
 }
 
 function sanitizeHistory(value) {
@@ -417,7 +434,7 @@ function assertCanWriteState(previousState, nextState, profile) {
     if (changedAny(before, after, ["inboundDate", "inboundQty"])) {
       requireProfilePermission(profile, "can_edit_schedule");
     }
-    if (changedAny(before, after, ["codeChange", "parentCode", "mainCode"])) {
+    if (changedAny(before, after, ["codeChange", "parentCode", "mainCode", "salesLinks"])) {
       requireProfilePermission(profile, "can_manage_links");
     }
   }

@@ -22,6 +22,7 @@ const COLUMNS = [
   { key: "inboundQty", label: "입고수량" },
   { key: "orderQty", label: "주문서수량" },
   { key: "source", label: "재고목록" },
+  { key: "salesLinks", label: "판매링크" },
   { key: "note", label: "메모" },
   { key: "history", label: "기록" },
   { key: "updatedAt", label: "수정일" },
@@ -30,7 +31,7 @@ const COLUMNS = [
 const VIEW_COLUMNS = {
   core: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
   stock: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt"],
-  catalog: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "note", "history"],
   depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
   all: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
@@ -259,6 +260,7 @@ function cleanItem(item) {
     inSimpleStock: Boolean(item.inSimpleStock ?? item.inApprovedStock),
     hiddenFromInventory: Boolean(item.hiddenFromInventory),
     source: String(item.source || "").trim(),
+    salesLinks: normalizeSalesLinks(item.salesLinks, true),
     note: String(item.note || "").trim(),
     history: normalizeItemHistory(item.history),
     createdAt: item.createdAt || new Date().toISOString(),
@@ -406,7 +408,7 @@ function renderTable() {
     .filter((item) => {
       if (!matchesActiveTab(item)) return false;
       if (!query) return true;
-      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note}`).includes(query);
+      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note} ${formatSalesLinksSearch(item.salesLinks)}`).includes(query);
     })
     .sort(sortItems);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -488,6 +490,7 @@ function renderCell(item, column) {
   }
   if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
   if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서/기존자료"}</td>`;
+  if (column.key === "salesLinks") return renderSalesLinksCell(item);
   if (column.key === "note") {
     return `
       <td class="note-cell">
@@ -515,7 +518,7 @@ function renderNameCell(item) {
 }
 
 function handleTableEdit(event) {
-  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input]")) return;
+  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input], [data-sales-link-input]")) return;
   const permissionKey = event.target.matches("[data-note-input]") ? "editMemo" : "manageLinks";
   if (!requireLogin(permissionKey)) {
     render();
@@ -527,6 +530,8 @@ function handleTableEdit(event) {
     const nextValue = event.target.value.trim();
     recordItemEdit(item, "메모", item.note, nextValue);
     item.note = nextValue;
+  } else if (event.target.matches("[data-sales-link-input]")) {
+    updateSalesLinkField(item, event.target.dataset.linkId, event.target.dataset.field, event.target.value);
   } else {
     const nextValue = event.target.matches("[data-main-code-input]") ? normalizeCode(event.target.value) : event.target.value.trim();
     if (event.target.matches("[data-main-code-input]")) {
@@ -541,6 +546,20 @@ function handleTableEdit(event) {
   item.updatedAt = new Date().toISOString();
   persist();
   render();
+}
+
+function updateSalesLinkField(item, linkId, field, value) {
+  const links = normalizeSalesLinks(item.salesLinks, true);
+  let link = links.find((entry) => entry.id === linkId);
+  if (!link) {
+    link = createEmptySalesLink(linkId);
+    links.push(link);
+  }
+  if (!["platform", "productName", "qty", "url"].includes(field)) return;
+  const before = formatSalesLinkForHistory(link);
+  link[field] = field === "qty" ? String(value || "").replace(/[^\d.-]/g, "").trim() : String(value || "").trim();
+  item.salesLinks = links.filter(hasSalesLinkContent);
+  recordItemEdit(item, "판매링크", before, formatSalesLinkForHistory(link));
 }
 
 function renderCodeChangeCell(item) {
@@ -559,11 +578,72 @@ function renderMainCodeCell(item) {
   `;
 }
 
+function renderSalesLinksCell(item) {
+  const links = normalizeSalesLinks(item.salesLinks, true);
+  const rows = links.length ? links : [createEmptySalesLink()];
+  return `
+    <td class="sales-links-cell">
+      <div class="sales-link-head" aria-hidden="true">
+        <span>플랫폼</span>
+        <span>판매상품명</span>
+        <span>수량</span>
+        <span>상품페이지링크</span>
+        <span></span>
+      </div>
+      <div class="sales-link-list">
+        ${rows.map((link) => renderSalesLinkRow(item, link)).join("")}
+      </div>
+      <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">판매링크 추가</button>
+    </td>
+  `;
+}
+
+function renderSalesLinkRow(item, link) {
+  const isSaved = Boolean(link.id && normalizeSalesLinks(item.salesLinks, true).some((entry) => entry.id === link.id));
+  return `
+    <div class="sales-link-row">
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="platform" value="${escapeHtml(link.platform)}" placeholder="오늘의집" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="productName" value="${escapeHtml(link.productName)}" placeholder="판매상품명" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="qty" value="${escapeHtml(link.qty)}" placeholder="수량" inputmode="numeric" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="url" value="${escapeHtml(link.url)}" placeholder="https://..." />
+      <button class="sales-link-delete" data-sales-link-delete data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
+    </div>
+  `;
+}
+
 function handleTableClick(event) {
   const historyButton = event.target.closest("[data-history-open]");
   if (historyButton) {
     const item = findItemByCode(historyButton.dataset.code);
     if (item) openHistoryModal(item);
+    return;
+  }
+
+  const addSalesLinkButton = event.target.closest("[data-sales-link-add]");
+  if (addSalesLinkButton) {
+    if (!requireLogin("manageLinks")) return;
+    const item = findItemByCode(addSalesLinkButton.dataset.code);
+    if (!item) return;
+    item.salesLinks = [...normalizeSalesLinks(item.salesLinks, true), createEmptySalesLink()];
+    item.updatedAt = new Date().toISOString();
+    recordItemEdit(item, "판매링크", "", "판매링크 추가");
+    persist();
+    render();
+    return;
+  }
+
+  const deleteSalesLinkButton = event.target.closest("[data-sales-link-delete]");
+  if (deleteSalesLinkButton) {
+    if (!requireLogin("manageLinks")) return;
+    const item = findItemByCode(deleteSalesLinkButton.dataset.code);
+    if (!item) return;
+    const links = normalizeSalesLinks(item.salesLinks, true);
+    const removed = links.find((entry) => entry.id === deleteSalesLinkButton.dataset.linkId);
+    item.salesLinks = links.filter((entry) => entry.id !== deleteSalesLinkButton.dataset.linkId);
+    item.updatedAt = new Date().toISOString();
+    recordItemEdit(item, "판매링크", formatSalesLinkForHistory(removed), "삭제");
+    persist();
+    render();
     return;
   }
 
@@ -760,8 +840,8 @@ function updateLoginLockedControls() {
   setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
   setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
   setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
-  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input]").forEach((control) => {
-    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/메인코드 수정 권한이 필요합니다.");
+  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete]").forEach((control) => {
+    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/메인코드/판매링크 수정 권한이 필요합니다.");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
     setControlLock(control, locked || !hasPermission("editMemo"), "메모 수정 권한이 필요합니다.");
@@ -1268,6 +1348,7 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
       inSimpleStock: true,
       hiddenFromInventory: false,
       source: fileName,
+      salesLinks: normalizeSalesLinks(existing?.salesLinks),
       note: existing?.note || "",
       codeChange: existing?.codeChange || "",
       inboundDate: existing?.inboundDate || "",
@@ -1361,6 +1442,7 @@ function applyOrderImport(table, fileName) {
       orderQty: order.qty,
       inSimpleStock: false,
       source: "",
+      salesLinks: [],
       note: "",
       codeChange: "",
       inboundDate: "",
@@ -1711,6 +1793,7 @@ function exportCsv() {
           item.inboundQty,
           item.orderQty,
           item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
+          formatSalesLinksForCsv(item.salesLinks),
           item.note,
           formatHistoryForCsv(item.history),
           formatDate(item.updatedAt),
@@ -1794,6 +1877,42 @@ function toInteger(value, fallback) {
 function toOptionalInteger(value) {
   const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function normalizeSalesLinks(value, keepEmpty = false) {
+  return Array.isArray(value)
+    ? value
+        .slice(0, 20)
+        .map((entry) => ({
+          id: String(entry?.id || createId()),
+          platform: String(entry?.platform || "").trim(),
+          productName: String(entry?.productName || "").trim(),
+          qty: String(entry?.qty || "").trim(),
+          url: String(entry?.url || "").trim(),
+        }))
+        .filter((entry) => keepEmpty || hasSalesLinkContent(entry))
+    : [];
+}
+
+function createEmptySalesLink(id = createId()) {
+  return { id: String(id || createId()), platform: "", productName: "", qty: "", url: "" };
+}
+
+function hasSalesLinkContent(link) {
+  return Boolean(link && (link.platform || link.productName || link.qty || link.url));
+}
+
+function formatSalesLinkForHistory(link) {
+  if (!link) return "";
+  return [link.platform, link.productName, link.qty ? `${link.qty}개` : "", link.url].filter(Boolean).join(" / ");
+}
+
+function formatSalesLinksSearch(links) {
+  return normalizeSalesLinks(links).map(formatSalesLinkForHistory).join(" ");
+}
+
+function formatSalesLinksForCsv(links) {
+  return normalizeSalesLinks(links).map(formatSalesLinkForHistory).join(" | ");
 }
 
 function normalizeItemHistory(value) {
