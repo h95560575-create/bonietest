@@ -14,6 +14,9 @@ const COLUMNS = [
   { key: "name", label: "상품명" },
   { key: "stock", label: "현재고" },
   { key: "processingStock", label: "처리중" },
+  { key: "stockChangeDetail", label: "현재고 변동" },
+  { key: "processingStockChangeDetail", label: "처리중 변동" },
+  { key: "availableStockChangeDetail", label: "가용재고 변동" },
   { key: "availableStock", label: "가용재고" },
   { key: "depletionEstimate", label: "소진예상" },
   { key: "depletionRate", label: "최근속도" },
@@ -30,9 +33,10 @@ const COLUMNS = [
 
 const VIEW_COLUMNS = {
   core: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
-  stock: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  stock: ["status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
   catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "note", "history"],
   depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
+  changes: ["status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "note", "history"],
   all: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
@@ -94,6 +98,7 @@ const els = {
   inventoryPanel: document.getElementById("inventoryPanel"),
   importPanel: document.getElementById("importPanel"),
   searchInput: document.getElementById("searchInput"),
+  sortSelect: document.getElementById("sortSelect"),
   panelToolbar: document.querySelector(".panel-toolbar"),
   exportBtn: document.getElementById("exportBtn"),
   adminBtn: document.getElementById("adminBtn"),
@@ -479,6 +484,7 @@ function renderCell(item, column) {
   if (column.key === "simpleStatus") return `<td>${renderSimpleStatus(item.simpleStatus)}</td>`;
   if (column.key === "name") return renderNameCell(item);
   if (column.key === "depletionEstimate") return renderDepletionEstimateCell(item);
+  if (["stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail"].includes(column.key)) return renderStockChangeDetailCell(item, column.key);
   if (column.key === "depletionRate") return renderDepletionRateCell(item);
   if (column.key === "depletionDate") return renderDepletionDateCell(item);
   if (["stock", "processingStock", "availableStock", "orderQty", "inboundQty"].includes(column.key)) {
@@ -670,15 +676,13 @@ function renderHistoryCell(item) {
 }
 
 function renderStockNumberCell(item, key, value) {
-  const delta = getStockDelta(item, key);
   const valueClass = key === "availableStock" ? item.status.className : "";
-  if (!delta) return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
-  const deltaClass = delta > 0 ? "number-delta-up" : "number-delta-down";
-  const arrow = delta > 0 ? "↑" : "↓";
+  const pair = getStockChangePair(item, key);
+  if (!pair) return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
+  const changeClass = pair.current > pair.previous ? "number-delta-up" : "number-delta-down";
   return `
     <td class="number-cell ${valueClass}">
-      <span class="number-value">${formatNumber(value)}</span>
-      <span class="number-delta ${deltaClass}">${arrow}${formatNumber(Math.abs(delta))}</span>
+      <span class="number-change-pair ${changeClass}">${formatNumber(pair.previous)} → ${formatNumber(pair.current)}</span>
     </td>
   `;
 }
@@ -688,6 +692,34 @@ function getStockDelta(item, key) {
   if (key === "processingStock") return item.processingStockDelta || 0;
   if (key === "availableStock") return item.availableStockDelta || 0;
   return 0;
+}
+
+function getStockChangePair(item, key) {
+  const map = {
+    stock: ["previousStock", "stock"],
+    processingStock: ["previousProcessingStock", "processingStock"],
+    availableStock: ["previousAvailableStock", "availableStock"],
+  };
+  const fields = map[key];
+  if (!fields || !getStockDelta(item, key)) return null;
+  const previous = Number(item[fields[0]]);
+  const current = key === "availableStock" ? item.stock - item.processingStock : Number(item[fields[1]]);
+  if (!Number.isFinite(previous) || !Number.isFinite(current)) return null;
+  if (previous === current) return null;
+  return { previous, current };
+}
+
+function renderStockChangeDetailCell(item, key) {
+  const stockKey = key === "stockChangeDetail" ? "stock" : key === "processingStockChangeDetail" ? "processingStock" : "availableStock";
+  const pair = getStockChangePair(item, stockKey);
+  if (!pair) return `<td class="change-cell muted">-</td>`;
+  const className = pair.current > pair.previous ? "change-up" : "change-down";
+  return `<td class="change-cell ${className}"><strong>${formatNumber(pair.previous)} → ${formatNumber(pair.current)}</strong></td>`;
+}
+
+function hasAnyStockChange(item) {
+  if (item.parentCode) return false;
+  return Boolean(getStockChangePair(item, "stock") || getStockChangePair(item, "processingStock") || getStockChangePair(item, "availableStock"));
 }
 
 function renderDepletionEstimateCell(item) {
@@ -1031,14 +1063,20 @@ function getStatus(item) {
 }
 
 function sortItems(a, b) {
-  const rank = { negative: 1, watch: 2, stockChange: 3, low5: 4, parent: 5, ok: 6 };
+  const rank = { negative: 1, watch: 2, stockChange: 3, parent: 5, ok: 6 };
   const groupSort =
     getMainGroupOrder(a) - getMainGroupOrder(b) ||
     getMainGroupCode(a).localeCompare(getMainGroupCode(b), "ko", { numeric: true }) ||
     getMainSubRank(a) - getMainSubRank(b) ||
     getInventoryOrder(a) - getInventoryOrder(b) ||
     a.code.localeCompare(b.code, "ko", { numeric: true });
+  const sortMode = els.sortSelect ? els.sortSelect.value : "default";
+  if (sortMode === "availableDesc") return b.availableStock - a.availableStock || groupSort;
+  if (sortMode === "availableAsc") return a.availableStock - b.availableStock || groupSort;
   if (activeTab === "all") return groupSort;
+  if (activeTab === "allStockChanges") {
+    return parseDateValue(b.stockChangedAt || b.updatedAt) - parseDateValue(a.stockChangedAt || a.updatedAt) || groupSort;
+  }
   return (
     getUrgentRank(a) - getUrgentRank(b) ||
     getSimpleStatusRank(a) - getSimpleStatusRank(b) ||
@@ -1075,7 +1113,7 @@ function getUrgentRank(item) {
 function matchesActiveTab(item) {
   if (activeTab === "all") return true;
   if (activeTab === "stockChange") return hasLowStockChange(item);
-  if (activeTab === "low5") return !item.parentCode && item.availableStock > 0 && item.availableStock <= 5;
+  if (activeTab === "allStockChanges") return hasAnyStockChange(item);
   return item.status.key === activeTab;
 }
 
@@ -1768,6 +1806,10 @@ function clearAllData() {
 }
 
 function exportCsv() {
+  if (activeTab === "allStockChanges") {
+    exportStockChangesCsv();
+    return;
+  }
   const rows = [
     COLUMNS.map((column) => column.label),
     ...state.items
@@ -1800,12 +1842,44 @@ function exportCsv() {
         ];
       }),
   ];
+  downloadCsv(rows, `jaesodan_inventory_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+function exportStockChangesCsv() {
+  const rows = [
+    ["상품코드", "변경코드", "상품명", "심플상태", "현재고 변동", "처리중 변동", "가용재고 변동", "수정일", "메모"],
+    ...state.items
+      .filter(isVisibleInventoryItem)
+      .map((item) => ({ ...item, status: getStatus(item) }))
+      .filter(hasAnyStockChange)
+      .sort(sortItems)
+      .map((item) => [
+        item.code,
+        item.codeChange || "",
+        item.name,
+        item.simpleStatus,
+        formatStockPairForCsv(item, "stock"),
+        formatStockPairForCsv(item, "processingStock"),
+        formatStockPairForCsv(item, "availableStock"),
+        formatDate(item.updatedAt),
+        item.note || "",
+      ]),
+  ];
+  downloadCsv(rows, `jaesodan_stock_changes_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+function formatStockPairForCsv(item, key) {
+  const pair = getStockChangePair(item, key);
+  return pair ? `${formatNumber(pair.previous)} -> ${formatNumber(pair.current)}` : "";
+}
+
+function downloadCsv(rows, filename) {
   const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `jaesodan_inventory_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
 }

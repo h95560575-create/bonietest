@@ -1298,3 +1298,26 @@ tr.row-low5 td {
     grid-template-columns: 1fr;
   }
 }
+
+.sort-field {
+  min-width: 128px;
+}
+
+.sort-field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.number-change-pair {
+  display: inline-block;
+  min-width: 52px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}

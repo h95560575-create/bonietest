@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=tabstate-20260618" />
+    <link rel="stylesheet" href="styles.css?v=stockchanges-20260619" />
   </head>
   <body>
     <div class="app-shell">
@@ -44,8 +44,8 @@
           <nav class="tabs" aria-label="재고 보기">
             <button class="tab" data-tab="watch" type="button">보류필요</button>
             <button class="tab" data-tab="stockChange" type="button">10개 미만 변동</button>
+            <button class="tab" data-tab="allStockChanges" type="button">변동내역</button>
             <button class="tab" data-tab="negative" type="button">마이너스</button>
-            <button class="tab" data-tab="low5" type="button">5개 이하</button>
             <button class="tab" data-tab="import" type="button">파일등록</button>
           </nav>
           <div class="filters">
@@ -56,6 +56,14 @@
             <label class="field compact">
               <span>검색</span>
               <input id="searchInput" type="search" placeholder="상품코드, 상품명" autocomplete="off" />
+            </label>
+            <label class="field sort-field">
+              <span>가용재고 정렬</span>
+              <select id="sortSelect">
+                <option value="default">기본순서</option>
+                <option value="availableDesc">많은순</option>
+                <option value="availableAsc">적은순</option>
+              </select>
             </label>
           </div>
         </section>
@@ -188,6 +196,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=tabstate-20260618"></script>
+    <script src="app.js?v=stockchanges-20260619"></script>
   </body>
 </html>
