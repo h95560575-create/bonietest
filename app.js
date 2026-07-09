@@ -5,6 +5,7 @@ const API_STATE_URL = "/api/state";
 const PAGE_SIZE = 50;
 
 const COLUMNS = [
+  { key: "sequence", label: "번호" },
   { key: "status", label: "상태" },
   { key: "code", label: "상품코드" },
   { key: "codeChange", label: "변경코드" },
@@ -27,22 +28,22 @@ const COLUMNS = [
   { key: "source", label: "재고목록" },
   { key: "salesLinks", label: "판매링크" },
   { key: "priceSettings", label: "가격설정 기준" },
-  { key: "periodSales", label: "기간설정 기준" },
+  { key: "periodSales", label: "기간 판매 조회" },
   { key: "note", label: "메모" },
   { key: "history", label: "기록" },
   { key: "updatedAt", label: "수정일" },
 ];
 
 const VIEW_COLUMNS = {
-  core: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
-  stock: ["status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
-  catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "history"],
-  depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt"],
-  priceDate: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
-  period: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
-  price: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
-  changes: ["status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
-  all: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  core: ["sequence", "status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
+  stock: ["sequence", "status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
+  catalog: ["sequence", "status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "history"],
+  depletion: ["sequence", "status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt"],
+  priceDate: ["sequence", "status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
+  period: ["sequence", "status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
+  price: ["sequence", "status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
+  changes: ["sequence", "status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
+  all: ["sequence", "status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
 const HEADER_ALIASES = {
@@ -109,6 +110,9 @@ const els = {
   sortSelect: document.getElementById("sortSelect"),
   panelToolbar: document.querySelector(".panel-toolbar"),
   priceModeBar: document.getElementById("priceModeBar"),
+  periodQueryBar: document.getElementById("periodQueryBar"),
+  periodStartInput: document.getElementById("periodStartInput"),
+  periodEndInput: document.getElementById("periodEndInput"),
   changeFilterBar: document.getElementById("changeFilterBar"),
   exportBtn: document.getElementById("exportBtn"),
   adminBtn: document.getElementById("adminBtn"),
@@ -181,6 +185,13 @@ if (els.sortSelect) {
     render();
   });
 }
+[els.periodStartInput, els.periodEndInput].forEach((input) => {
+  if (!input) return;
+  input.addEventListener("change", () => {
+    currentPage = 1;
+    render();
+  });
+});
 els.firstPageBtn.addEventListener("click", () => {
   currentPage = 1;
   render();
@@ -300,6 +311,7 @@ function cleanItem(item) {
     salesLinks: normalizeSalesLinks(item.salesLinks, true),
     priceSettings: normalizePriceSettings(item.priceSettings, true),
     periodSales: normalizePeriodSales(item.periodSales, true),
+    stockLogs: normalizeStockLogs(item.stockLogs),
     note: String(item.note || "").trim(),
     history: normalizeItemHistory(item.history),
     createdAt: item.createdAt || new Date().toISOString(),
@@ -437,6 +449,10 @@ function render() {
     });
   }
 
+  if (els.periodQueryBar) {
+    els.periodQueryBar.hidden = !(activeTab === "all" && activeView === "price" && priceMode === "period");
+  }
+
   if (els.changeFilterBar) {
     els.changeFilterBar.hidden = activeTab !== "allStockChanges";
     document.querySelectorAll("[data-change-filter]").forEach((button) => {
@@ -471,11 +487,12 @@ function renderTable() {
     .sort(sortItems);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   currentPage = Math.min(Math.max(1, currentPage), totalPages);
-  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pageRows = rows.slice(pageStart, currentPage * PAGE_SIZE);
 
   els.emptyState.hidden = rows.length > 0;
   els.inventoryHead.innerHTML = getVisibleColumns().map((column) => `<th class="${getColumnHeaderClass(column.key)}">${escapeHtml(column.label)}</th>`).join("");
-  els.inventoryBody.innerHTML = pageRows.map(renderRow).join("");
+  els.inventoryBody.innerHTML = pageRows.map((item, index) => renderRow(item, pageStart + index + 1)).join("");
   renderPagination(rows.length, totalPages);
 }
 
@@ -503,11 +520,11 @@ function getPageNumbers(page, totalPages) {
   return sorted.flatMap((item, index) => (index > 0 && item - sorted[index - 1] > 1 ? ["gap", item] : [item]));
 }
 
-function renderRow(item) {
+function renderRow(item, rowNumber = 0) {
   const rowClass = `row-${item.status.key}`;
   return `
     <tr class="${rowClass}">
-      ${getVisibleColumns().map((column) => renderCell(item, column)).join("")}
+      ${getVisibleColumns().map((column) => renderCell(item, column, rowNumber)).join("")}
     </tr>
   `;
 }
@@ -519,6 +536,7 @@ function getVisibleColumns() {
 }
 
 function getColumnHeaderClass(key) {
+  if (key === "sequence") return "sequence-head";
   if (key === "inboundQty") return "center-head";
   if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
   if (["status", "parentCode", "mainCode", "simpleStatus", "history"].includes(key)) return "center-head";
@@ -528,7 +546,8 @@ function getColumnHeaderClass(key) {
   return "";
 }
 
-function renderCell(item, column) {
+function renderCell(item, column, rowNumber = 0) {
+  if (column.key === "sequence") return `<td class="sequence-cell">${formatNumber(rowNumber)}</td>`;
   if (column.key === "status") {
     return `<td><span class="status ${item.status.className}">${escapeHtml(item.status.label)}</span></td>`;
   }
@@ -743,21 +762,25 @@ function renderPriceSettingRow(item, entry) {
 }
 
 function renderPeriodSalesCell(item) {
-  const rows = normalizePeriodSales(item.periodSales, true);
-  const displayRows = rows.length ? rows : [createEmptyPeriodSale()];
+  const range = getPeriodQueryRange();
+  const stats = getPeriodSalesStats(item, range);
+  if (!range.start || !range.end) {
+    return `
+      <td class="period-sales-cell">
+        <strong>기간 선택 필요</strong>
+        <span>위에서 시작일과 종료일을 선택하면 자동으로 계산됩니다.</span>
+      </td>
+    `;
+  }
+
   return `
-    <td class="price-tracking-cell">
-      <div class="price-tracking-head period-sale-head" aria-hidden="true">
-        <span>시작일</span>
-        <span>종료일</span>
-        <span>판매량</span>
-        <span>메모</span>
-        <span></span>
+    <td class="period-sales-cell">
+      <div class="period-sales-summary">
+        <strong>${formatNumber(stats.soldQty)}개 판매</strong>
+        <span>${escapeHtml(formatPeriodRangeLabel(range))}</span>
+        <span>증가 ${formatNumber(stats.increasedQty)}개 / 순변동 ${formatSignedNumber(stats.netChange)}개</span>
+        <span>기록 ${formatNumber(stats.logCount)}건 기준</span>
       </div>
-      <div class="price-tracking-list">
-        ${displayRows.map((entry) => renderPeriodSaleRow(item, entry)).join("")}
-      </div>
-      <button class="price-tracking-add" data-period-add data-code="${escapeHtml(item.code)}" type="button">기간기록 추가</button>
     </td>
   `;
 }
@@ -891,17 +914,7 @@ function renderHistoryCell(item) {
 
 function renderStockNumberCell(item, key, value) {
   const valueClass = key === "availableStock" ? item.status.className : "";
-  if (!(activeTab === "all" && activeView === "all")) {
-    return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
-  }
-  const pair = getStockChangePair(item, key);
-  if (!pair) return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
-  const changeClass = pair.current > pair.previous ? "number-delta-up" : "number-delta-down";
-  return `
-    <td class="number-cell ${valueClass}">
-      <span class="number-change-pair ${changeClass}">${formatNumber(pair.previous)} → ${formatNumber(pair.current)}</span>
-    </td>
-  `;
+  return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
 }
 
 function getStockDelta(item, key) {
@@ -1652,6 +1665,19 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
     const previousStockChangedAt = existing?.stockChangedAt || existing?.updatedAt || "";
     const stockChangedAt = availableStockDelta === 0 ? existing?.stockChangedAt || "" : now;
     const simpleStatus = map.simpleStatus ? normalizeSimpleStatus(record[map.simpleStatus]) : findSimpleStatusInRecord(record);
+    const stockLogs = normalizeStockLogs(existing?.stockLogs);
+    if (existing && (stockDelta !== 0 || processingStockDelta !== 0 || availableStockDelta !== 0)) {
+      stockLogs.push(createStockLog({
+        at: now,
+        source: fileName,
+        previousStock,
+        stock,
+        previousProcessingStock,
+        processingStock,
+        previousAvailableStock,
+        availableStock,
+      }));
+    }
     const payload = {
       code,
       simpleStatus: simpleStatus || existing?.simpleStatus || "",
@@ -1673,6 +1699,7 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
       salesLinks: normalizeSalesLinks(existing?.salesLinks),
       priceSettings: normalizePriceSettings(existing?.priceSettings),
       periodSales: normalizePeriodSales(existing?.periodSales),
+      stockLogs,
       note: existing?.note || "",
       codeChange: existing?.codeChange || "",
       inboundDate: existing?.inboundDate || "",
@@ -1769,6 +1796,7 @@ function applyOrderImport(table, fileName) {
       salesLinks: [],
       priceSettings: [],
       periodSales: [],
+      stockLogs: [],
       note: "",
       codeChange: "",
       inboundDate: "",
@@ -2125,7 +2153,7 @@ function exportCsv() {
           item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
           formatSalesLinksForCsv(item.salesLinks),
           formatPriceSettingsForCsv(item.priceSettings),
-          formatPeriodSalesForCsv(item.periodSales),
+          formatPeriodSalesForCsv(item),
           item.note,
           formatHistoryForCsv(item.history),
           formatDate(item.updatedAt),
@@ -2308,6 +2336,7 @@ function formatPriceTrackingSearch(item) {
   return [
     ...normalizePriceSettings(item.priceSettings).map(formatPriceSettingForHistory),
     ...normalizePeriodSales(item.periodSales).map(formatPeriodSaleForHistory),
+    ...normalizeStockLogs(item.stockLogs).map((entry) => entry.source),
   ].join(" ");
 }
 
@@ -2315,8 +2344,95 @@ function formatPriceSettingsForCsv(rows) {
   return normalizePriceSettings(rows).map(formatPriceSettingForHistory).join(" | ");
 }
 
-function formatPeriodSalesForCsv(rows) {
-  return normalizePeriodSales(rows).map(formatPeriodSaleForHistory).join(" | ");
+function formatPeriodSalesForCsv(itemOrRows) {
+  if (Array.isArray(itemOrRows)) return normalizePeriodSales(itemOrRows).map(formatPeriodSaleForHistory).join(" | ");
+  const range = getPeriodQueryRange();
+  const stats = getPeriodSalesStats(itemOrRows, range);
+  if (!range.start || !range.end) return "";
+  return `${formatPeriodRangeLabel(range)} / 판매 ${formatNumber(stats.soldQty)}개 / 증가 ${formatNumber(stats.increasedQty)}개 / 순변동 ${formatSignedNumber(stats.netChange)}개 / 기록 ${formatNumber(stats.logCount)}건`;
+}
+
+function normalizeStockLogs(value) {
+  return Array.isArray(value)
+    ? value
+        .slice(-800)
+        .map((entry) => ({
+          id: String(entry?.id || createId()),
+          at: entry?.at || "",
+          source: String(entry?.source || "").trim(),
+          stockBefore: toOptionalInteger(entry?.stockBefore),
+          stockAfter: toOptionalInteger(entry?.stockAfter),
+          processingBefore: toOptionalInteger(entry?.processingBefore),
+          processingAfter: toOptionalInteger(entry?.processingAfter),
+          availableBefore: toOptionalInteger(entry?.availableBefore),
+          availableAfter: toOptionalInteger(entry?.availableAfter),
+        }))
+        .filter((entry) => entry.at)
+    : [];
+}
+
+function createStockLog({ at, source, previousStock, stock, previousProcessingStock, processingStock, previousAvailableStock, availableStock }) {
+  return {
+    id: createId(),
+    at,
+    source: String(source || "").trim(),
+    stockBefore: previousStock,
+    stockAfter: stock,
+    processingBefore: previousProcessingStock,
+    processingAfter: processingStock,
+    availableBefore: previousAvailableStock,
+    availableAfter: availableStock,
+  };
+}
+
+function getPeriodQueryRange() {
+  return {
+    start: parsePeriodDate(els.periodStartInput?.value, false),
+    end: parsePeriodDate(els.periodEndInput?.value, true),
+  };
+}
+
+function parsePeriodDate(value, endOfDay) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const date = new Date(`${text}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatPeriodRangeLabel(range) {
+  return `${formatQueryDate(range.start)} ~ ${formatQueryDate(range.end)}`;
+}
+
+function formatQueryDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "-";
+  const year = String(date.getFullYear()).slice(-2);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}.${month}.${day}`;
+}
+
+function getPeriodSalesStats(item, range) {
+  if (!item || !range?.start || !range?.end || range.start > range.end) {
+    return { soldQty: 0, increasedQty: 0, netChange: 0, logCount: 0 };
+  }
+  return normalizeStockLogs(item.stockLogs).reduce((stats, log) => {
+    const at = new Date(log.at);
+    if (Number.isNaN(at.getTime()) || at < range.start || at > range.end) return stats;
+    const before = toOptionalInteger(log.availableBefore);
+    const after = toOptionalInteger(log.availableAfter);
+    if (before === null || after === null || before === after) return stats;
+    const diff = after - before;
+    if (diff < 0) stats.soldQty += Math.abs(diff);
+    if (diff > 0) stats.increasedQty += diff;
+    stats.netChange += diff;
+    stats.logCount += 1;
+    return stats;
+  }, { soldQty: 0, increasedQty: 0, netChange: 0, logCount: 0 });
+}
+
+function formatSignedNumber(value) {
+  const number = Number(value || 0);
+  return number > 0 ? `+${formatNumber(number)}` : formatNumber(number);
 }
 
 function cleanNumberText(value) {

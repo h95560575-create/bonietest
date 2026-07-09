@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=import-tabs-20260709" />
+    <link rel="stylesheet" href="styles.css?v=period-sales-20260709" />
   </head>
   <body>
     <div class="app-shell">
@@ -78,7 +78,11 @@
             </nav>
             <div class="price-mode-bar" id="priceModeBar" hidden>
               <button class="price-mode-button active" data-price-mode="priceDate" type="button">가격설정 기준</button>
-              <button class="price-mode-button" data-price-mode="period" type="button">기간설정 기준</button>
+              <button class="price-mode-button" data-price-mode="period" type="button">기간 판매 조회</button>
+            </div>
+            <div class="period-query-bar" id="periodQueryBar" hidden>
+              <label>시작일 <input id="periodStartInput" type="date" /></label>
+              <label>종료일 <input id="periodEndInput" type="date" /></label>
             </div>
             <div class="change-filter-bar" id="changeFilterBar" hidden>
               <button class="change-filter-button active" data-change-filter="all" type="button">전체</button>
@@ -207,6 +211,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=import-tabs-20260709"></script>
+    <script src="app.js?v=period-sales-20260709"></script>
   </body>
 </html>
