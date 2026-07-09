@@ -34,14 +34,14 @@ const COLUMNS = [
 ];
 
 const VIEW_COLUMNS = {
-  core: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
-  stock: ["status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
-  catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "note", "history"],
-  depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
-  priceDate: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "note", "history"],
-  period: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "note", "history"],
-  price: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "note", "history"],
-  changes: ["status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "note", "history"],
+  core: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
+  stock: ["status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
+  catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "history"],
+  depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt"],
+  priceDate: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
+  period: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
+  price: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
+  changes: ["status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
   all: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
@@ -1215,10 +1215,8 @@ async function handleAdminPermissionChange(event) {
 
 function renderParentCodeCell(item) {
   const label = item.parentCode ? "해제" : "지정";
-  const badge = item.parentCode ? `<span class="parent-badge">메인코드</span>` : "";
   return `
     <td class="parent-code-cell">
-      ${badge}
       <button class="parent-code-button ${item.parentCode ? "active" : ""}" data-parent-code-toggle data-code="${escapeHtml(item.code)}" type="button">${label}</button>
     </td>
   `;

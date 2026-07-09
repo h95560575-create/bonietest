@@ -842,6 +842,7 @@ tbody tr:hover td {
 .parent-code-cell {
   min-width: 104px;
   white-space: nowrap;
+  text-align: center;
 }
 
 .parent-badge {
@@ -858,6 +859,10 @@ tbody tr:hover td {
 }
 
 .parent-code-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 999px;
