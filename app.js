@@ -104,6 +104,7 @@ const els = {
   pageNumberList: document.getElementById("pageNumberList"),
   inventoryPanel: document.getElementById("inventoryPanel"),
   importPanel: document.getElementById("importPanel"),
+  tableWrap: document.querySelector(".table-wrap"),
   searchInput: document.getElementById("searchInput"),
   sortSelect: document.getElementById("sortSelect"),
   panelToolbar: document.querySelector(".panel-toolbar"),
@@ -161,6 +162,14 @@ document.querySelectorAll("[data-price-mode]").forEach((button) => {
 document.querySelectorAll("[data-change-filter]").forEach((button) => {
   button.addEventListener("click", () => setChangeFilter(button.dataset.changeFilter));
 });
+
+if (els.panelToolbar) {
+  els.panelToolbar.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-change-filter]");
+    if (!button) return;
+    setChangeFilter(button.dataset.changeFilter);
+  });
+}
 
 els.searchInput.addEventListener("input", () => {
   currentPage = 1;
@@ -435,8 +444,13 @@ function render() {
     });
   }
 
-  els.inventoryPanel.hidden = activeTab === "import";
+  els.inventoryPanel.hidden = false;
   els.importPanel.hidden = activeTab !== "import";
+  if (els.tableWrap) els.tableWrap.hidden = activeTab === "import";
+  if (activeTab === "import") {
+    els.emptyState.hidden = true;
+    els.paginationBar.hidden = true;
+  }
 
   renderImportPanel();
   renderTable();
@@ -1474,8 +1488,19 @@ function getCodeFamily(code) {
 }
 
 function setTab(tab) {
-  activeTab = tab;
-  activeView = "all";
+  activeTab = tab === "stockChange" ? "allStockChanges" : tab;
+  activeView = activeTab === "allStockChanges" ? "changes" : "all";
+  if (activeTab === "allStockChanges" && !["all", "down", "up", "negative", "hold"].includes(changeFilter)) {
+    changeFilter = "all";
+  }
+  currentPage = 1;
+  render();
+}
+
+function setChangeFilter(filter) {
+  activeTab = "allStockChanges";
+  activeView = "changes";
+  changeFilter = ["all", "down", "up", "negative", "hold"].includes(filter) ? filter : "all";
   currentPage = 1;
   render();
 }
@@ -1520,6 +1545,12 @@ async function handleFileSelection(mode) {
     state.lastColumns = lastColumns;
     setImportMeta(mode, `${files.length}개 파일 반영 완료`);
     addActivity(mode === "inventory" ? "재고목록 일괄 반영" : mode === "orders" ? "주문서 일괄 반영" : "입고일정 일괄 반영", summaries.join(" / "));
+    if (mode === "inventory") {
+      activeTab = "allStockChanges";
+      activeView = "changes";
+      changeFilter = "all";
+      currentPage = 1;
+    }
     persist();
     render();
   } catch (error) {
