@@ -34,7 +34,7 @@ const COLUMNS = [
 ];
 
 const VIEW_COLUMNS = {
-  core: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  core: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
   stock: ["status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
   catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "note", "history"],
   depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
@@ -42,7 +42,7 @@ const VIEW_COLUMNS = {
   period: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "note", "history"],
   price: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "note", "history"],
   changes: ["status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "note", "history"],
-  all: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  all: ["status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
 const HEADER_ALIASES = {
@@ -862,6 +862,9 @@ function renderHistoryCell(item) {
 
 function renderStockNumberCell(item, key, value) {
   const valueClass = key === "availableStock" ? item.status.className : "";
+  if (!(activeTab === "all" && activeView === "all")) {
+    return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
+  }
   const pair = getStockChangePair(item, key);
   if (!pair) return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
   const changeClass = pair.current > pair.previous ? "number-delta-up" : "number-delta-down";
