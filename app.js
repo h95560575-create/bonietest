@@ -26,6 +26,8 @@ const COLUMNS = [
   { key: "orderQty", label: "주문서수량" },
   { key: "source", label: "재고목록" },
   { key: "salesLinks", label: "판매링크" },
+  { key: "priceSettings", label: "가격설정 기준" },
+  { key: "periodSales", label: "기간설정 기준" },
   { key: "note", label: "메모" },
   { key: "history", label: "기록" },
   { key: "updatedAt", label: "수정일" },
@@ -36,6 +38,9 @@ const VIEW_COLUMNS = {
   stock: ["status", "code", "codeChange", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
   catalog: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "note", "history"],
   depletion: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt", "note"],
+  priceDate: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "note", "history"],
+  period: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "note", "history"],
+  price: ["status", "code", "simpleStatus", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "note", "history"],
   changes: ["status", "code", "codeChange", "simpleStatus", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "note", "history"],
   all: ["status", "code", "codeChange", "parentCode", "mainCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
@@ -73,6 +78,7 @@ const ALIAS_SETS = Object.fromEntries(
 let state = loadState();
 let activeTab = "all";
 let activeView = "all";
+let priceMode = "priceDate";
 let currentPage = 1;
 let serverSyncEnabled = false;
 let saveDebounceId = null;
@@ -100,6 +106,7 @@ const els = {
   searchInput: document.getElementById("searchInput"),
   sortSelect: document.getElementById("sortSelect"),
   panelToolbar: document.querySelector(".panel-toolbar"),
+  priceModeBar: document.getElementById("priceModeBar"),
   exportBtn: document.getElementById("exportBtn"),
   adminBtn: document.getElementById("adminBtn"),
   loginBtn: document.getElementById("loginBtn"),
@@ -145,10 +152,20 @@ document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 
+document.querySelectorAll("[data-price-mode]").forEach((button) => {
+  button.addEventListener("click", () => setPriceMode(button.dataset.priceMode));
+});
+
 els.searchInput.addEventListener("input", () => {
   currentPage = 1;
   render();
 });
+if (els.sortSelect) {
+  els.sortSelect.addEventListener("change", () => {
+    currentPage = 1;
+    render();
+  });
+}
 els.firstPageBtn.addEventListener("click", () => {
   currentPage = 1;
   render();
@@ -266,6 +283,8 @@ function cleanItem(item) {
     hiddenFromInventory: Boolean(item.hiddenFromInventory),
     source: String(item.source || "").trim(),
     salesLinks: normalizeSalesLinks(item.salesLinks, true),
+    priceSettings: normalizePriceSettings(item.priceSettings, true),
+    periodSales: normalizePeriodSales(item.periodSales, true),
     note: String(item.note || "").trim(),
     history: normalizeItemHistory(item.history),
     createdAt: item.createdAt || new Date().toISOString(),
@@ -396,6 +415,13 @@ function render() {
     button.classList.toggle("active", activeTab === "all" && button.dataset.view === activeView);
   });
 
+  if (els.priceModeBar) {
+    els.priceModeBar.hidden = !(activeTab === "all" && activeView === "price");
+    document.querySelectorAll("[data-price-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.priceMode === priceMode);
+    });
+  }
+
   els.inventoryPanel.hidden = activeTab === "import";
   els.importPanel.hidden = activeTab !== "import";
 
@@ -409,11 +435,11 @@ function renderTable() {
   const query = normalizeSearch(els.searchInput.value);
   const rows = state.items
     .filter(isVisibleInventoryItem)
-    .map((item) => ({ ...item, status: getStatus(item) }))
+    .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }))
     .filter((item) => {
       if (!matchesActiveTab(item)) return false;
       if (!query) return true;
-      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note} ${formatSalesLinksSearch(item.salesLinks)}`).includes(query);
+      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note} ${formatSalesLinksSearch(item.salesLinks)} ${formatPriceTrackingSearch(item)}`).includes(query);
     })
     .sort(sortItems);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -460,7 +486,8 @@ function renderRow(item) {
 }
 
 function getVisibleColumns() {
-  const keys = VIEW_COLUMNS[activeView] || VIEW_COLUMNS.all;
+  const viewKey = activeView === "price" ? priceMode : activeView;
+  const keys = VIEW_COLUMNS[viewKey] || VIEW_COLUMNS.all;
   return keys.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean);
 }
 
@@ -497,6 +524,8 @@ function renderCell(item, column) {
   if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
   if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서/기존자료"}</td>`;
   if (column.key === "salesLinks") return renderSalesLinksCell(item);
+  if (column.key === "priceSettings") return renderPriceSettingsCell(item);
+  if (column.key === "periodSales") return renderPeriodSalesCell(item);
   if (column.key === "note") {
     return `
       <td class="note-cell">
@@ -524,7 +553,7 @@ function renderNameCell(item) {
 }
 
 function handleTableEdit(event) {
-  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input], [data-sales-link-input]")) return;
+  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input], [data-sales-link-input], [data-price-input], [data-period-input]")) return;
   const permissionKey = event.target.matches("[data-note-input]") ? "editMemo" : "manageLinks";
   if (!requireLogin(permissionKey)) {
     render();
@@ -538,6 +567,10 @@ function handleTableEdit(event) {
     item.note = nextValue;
   } else if (event.target.matches("[data-sales-link-input]")) {
     updateSalesLinkField(item, event.target.dataset.linkId, event.target.dataset.field, event.target.value);
+  } else if (event.target.matches("[data-price-input]")) {
+    updatePriceSettingField(item, event.target.dataset.priceId, event.target.dataset.field, event.target.value);
+  } else if (event.target.matches("[data-period-input]")) {
+    updatePeriodSaleField(item, event.target.dataset.periodId, event.target.dataset.field, event.target.value);
   } else {
     const nextValue = event.target.matches("[data-main-code-input]") ? normalizeCode(event.target.value) : event.target.value.trim();
     if (event.target.matches("[data-main-code-input]")) {
@@ -552,6 +585,34 @@ function handleTableEdit(event) {
   item.updatedAt = new Date().toISOString();
   persist();
   render();
+}
+
+function updatePriceSettingField(item, rowId, field, value) {
+  const rows = normalizePriceSettings(item.priceSettings, true);
+  let row = rows.find((entry) => entry.id === rowId);
+  if (!row) {
+    row = createEmptyPriceSetting(rowId);
+    rows.push(row);
+  }
+  if (!["oldPrice", "newPrice", "date", "soldQty", "memo"].includes(field)) return;
+  const before = formatPriceSettingForHistory(row);
+  row[field] = ["oldPrice", "newPrice", "soldQty"].includes(field) ? cleanNumberText(value) : String(value || "").trim();
+  item.priceSettings = rows.filter(hasPriceSettingContent);
+  recordItemEdit(item, "가격설정", before, formatPriceSettingForHistory(row));
+}
+
+function updatePeriodSaleField(item, rowId, field, value) {
+  const rows = normalizePeriodSales(item.periodSales, true);
+  let row = rows.find((entry) => entry.id === rowId);
+  if (!row) {
+    row = createEmptyPeriodSale(rowId);
+    rows.push(row);
+  }
+  if (!["startDate", "endDate", "soldQty", "memo"].includes(field)) return;
+  const before = formatPeriodSaleForHistory(row);
+  row[field] = field === "soldQty" ? cleanNumberText(value) : String(value || "").trim();
+  item.periodSales = rows.filter(hasPeriodSaleContent);
+  recordItemEdit(item, "기간판매", before, formatPeriodSaleForHistory(row));
 }
 
 function updateSalesLinkField(item, linkId, field, value) {
@@ -617,11 +678,135 @@ function renderSalesLinkRow(item, link) {
   `;
 }
 
+function renderPriceSettingsCell(item) {
+  const rows = normalizePriceSettings(item.priceSettings, true);
+  const displayRows = rows.length ? rows : [createEmptyPriceSetting()];
+  return `
+    <td class="price-tracking-cell">
+      <div class="price-tracking-head price-date-head" aria-hidden="true">
+        <span>기존가격</span>
+        <span>조정가격</span>
+        <span>가격설정일</span>
+        <span>판매량</span>
+        <span>메모</span>
+        <span></span>
+      </div>
+      <div class="price-tracking-list">
+        ${displayRows.map((entry) => renderPriceSettingRow(item, entry)).join("")}
+      </div>
+      <button class="price-tracking-add" data-price-add data-code="${escapeHtml(item.code)}" type="button">가격기록 추가</button>
+    </td>
+  `;
+}
+
+function renderPriceSettingRow(item, entry) {
+  const isSaved = Boolean(entry.id && normalizePriceSettings(item.priceSettings, true).some((saved) => saved.id === entry.id));
+  return `
+    <div class="price-tracking-row price-date-row">
+      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="oldPrice" value="${escapeHtml(entry.oldPrice)}" placeholder="예: 199000" inputmode="numeric" />
+      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="newPrice" value="${escapeHtml(entry.newPrice)}" placeholder="예: 179000" inputmode="numeric" />
+      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="date" value="${escapeHtml(entry.date)}" placeholder="26.07.09" />
+      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="판매량" inputmode="numeric" />
+      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="메모" />
+      <button class="price-tracking-delete" data-price-delete data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
+    </div>
+  `;
+}
+
+function renderPeriodSalesCell(item) {
+  const rows = normalizePeriodSales(item.periodSales, true);
+  const displayRows = rows.length ? rows : [createEmptyPeriodSale()];
+  return `
+    <td class="price-tracking-cell">
+      <div class="price-tracking-head period-sale-head" aria-hidden="true">
+        <span>시작일</span>
+        <span>종료일</span>
+        <span>판매량</span>
+        <span>메모</span>
+        <span></span>
+      </div>
+      <div class="price-tracking-list">
+        ${displayRows.map((entry) => renderPeriodSaleRow(item, entry)).join("")}
+      </div>
+      <button class="price-tracking-add" data-period-add data-code="${escapeHtml(item.code)}" type="button">기간기록 추가</button>
+    </td>
+  `;
+}
+
+function renderPeriodSaleRow(item, entry) {
+  const isSaved = Boolean(entry.id && normalizePeriodSales(item.periodSales, true).some((saved) => saved.id === entry.id));
+  return `
+    <div class="price-tracking-row period-sale-row">
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="startDate" value="${escapeHtml(entry.startDate)}" placeholder="26.07.09" />
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="endDate" value="${escapeHtml(entry.endDate)}" placeholder="26.07.15" />
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="판매량" inputmode="numeric" />
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="메모" />
+      <button class="price-tracking-delete" data-period-delete data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
+    </div>
+  `;
+}
+
 function handleTableClick(event) {
   const historyButton = event.target.closest("[data-history-open]");
   if (historyButton) {
     const item = findItemByCode(historyButton.dataset.code);
     if (item) openHistoryModal(item);
+    return;
+  }
+
+  const addPriceButton = event.target.closest("[data-price-add]");
+  if (addPriceButton) {
+    if (!requireLogin("manageLinks")) return;
+    const item = findItemByCode(addPriceButton.dataset.code);
+    if (!item) return;
+    item.priceSettings = [...normalizePriceSettings(item.priceSettings, true), createEmptyPriceSetting()];
+    item.updatedAt = new Date().toISOString();
+    recordItemEdit(item, "가격설정", "", "가격기록 추가");
+    persist();
+    render();
+    return;
+  }
+
+  const deletePriceButton = event.target.closest("[data-price-delete]");
+  if (deletePriceButton) {
+    if (!requireLogin("manageLinks")) return;
+    const item = findItemByCode(deletePriceButton.dataset.code);
+    if (!item) return;
+    const rows = normalizePriceSettings(item.priceSettings, true);
+    const removed = rows.find((entry) => entry.id === deletePriceButton.dataset.priceId);
+    item.priceSettings = rows.filter((entry) => entry.id !== deletePriceButton.dataset.priceId);
+    item.updatedAt = new Date().toISOString();
+    recordItemEdit(item, "가격설정", formatPriceSettingForHistory(removed), "삭제");
+    persist();
+    render();
+    return;
+  }
+
+  const addPeriodButton = event.target.closest("[data-period-add]");
+  if (addPeriodButton) {
+    if (!requireLogin("manageLinks")) return;
+    const item = findItemByCode(addPeriodButton.dataset.code);
+    if (!item) return;
+    item.periodSales = [...normalizePeriodSales(item.periodSales, true), createEmptyPeriodSale()];
+    item.updatedAt = new Date().toISOString();
+    recordItemEdit(item, "기간판매", "", "기간기록 추가");
+    persist();
+    render();
+    return;
+  }
+
+  const deletePeriodButton = event.target.closest("[data-period-delete]");
+  if (deletePeriodButton) {
+    if (!requireLogin("manageLinks")) return;
+    const item = findItemByCode(deletePeriodButton.dataset.code);
+    if (!item) return;
+    const rows = normalizePeriodSales(item.periodSales, true);
+    const removed = rows.find((entry) => entry.id === deletePeriodButton.dataset.periodId);
+    item.periodSales = rows.filter((entry) => entry.id !== deletePeriodButton.dataset.periodId);
+    item.updatedAt = new Date().toISOString();
+    recordItemEdit(item, "기간판매", formatPeriodSaleForHistory(removed), "삭제");
+    persist();
+    render();
     return;
   }
 
@@ -872,7 +1057,7 @@ function updateLoginLockedControls() {
   setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
   setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
   setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
-  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete]").forEach((control) => {
+  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete], [data-price-input], [data-price-add], [data-price-delete], [data-period-input], [data-period-add], [data-period-delete]").forEach((control) => {
     setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/메인코드/판매링크 수정 권한이 필요합니다.");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
@@ -1064,6 +1249,7 @@ function getStatus(item) {
 
 function sortItems(a, b) {
   const rank = { negative: 1, watch: 2, stockChange: 3, parent: 5, ok: 6 };
+  const simpleStatusSort = getSimpleStatusRank(a) - getSimpleStatusRank(b);
   const groupSort =
     getMainGroupOrder(a) - getMainGroupOrder(b) ||
     getMainGroupCode(a).localeCompare(getMainGroupCode(b), "ko", { numeric: true }) ||
@@ -1071,15 +1257,15 @@ function sortItems(a, b) {
     getInventoryOrder(a) - getInventoryOrder(b) ||
     a.code.localeCompare(b.code, "ko", { numeric: true });
   const sortMode = els.sortSelect ? els.sortSelect.value : "default";
-  if (sortMode === "availableDesc") return b.availableStock - a.availableStock || groupSort;
-  if (sortMode === "availableAsc") return a.availableStock - b.availableStock || groupSort;
-  if (activeTab === "all") return groupSort;
+  if (sortMode === "availableDesc") return simpleStatusSort || b.availableStock - a.availableStock || groupSort;
+  if (sortMode === "availableAsc") return simpleStatusSort || a.availableStock - b.availableStock || groupSort;
+  if (activeTab === "all") return simpleStatusSort || groupSort;
   if (activeTab === "allStockChanges") {
-    return parseDateValue(b.stockChangedAt || b.updatedAt) - parseDateValue(a.stockChangedAt || a.updatedAt) || groupSort;
+    return simpleStatusSort || parseDateValue(b.stockChangedAt || b.updatedAt) - parseDateValue(a.stockChangedAt || a.updatedAt) || groupSort;
   }
   return (
     getUrgentRank(a) - getUrgentRank(b) ||
-    getSimpleStatusRank(a) - getSimpleStatusRank(b) ||
+    simpleStatusSort ||
     (rank[a.status.key] || 9) - (rank[b.status.key] || 9) ||
     groupSort
   );
@@ -1192,8 +1378,8 @@ function formatStockChangeText(item) {
 function getSimpleStatusRank(item) {
   const status = normalizeSimpleStatus(item.simpleStatus);
   if (status === "승인") return 1;
-  if (status === "보류") return 3;
-  return 2;
+  if (status === "보류") return 2;
+  return 3;
 }
 
 function getProductGroupKey(item) {
@@ -1237,6 +1423,13 @@ function setTab(tab) {
 function setView(view) {
   activeTab = "all";
   activeView = VIEW_COLUMNS[view] ? view : "all";
+  if (activeView === "price" && !["priceDate", "period"].includes(priceMode)) priceMode = "priceDate";
+  currentPage = 1;
+  render();
+}
+
+function setPriceMode(mode) {
+  priceMode = mode === "period" ? "period" : "priceDate";
   currentPage = 1;
   render();
 }
@@ -1387,6 +1580,8 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
       hiddenFromInventory: false,
       source: fileName,
       salesLinks: normalizeSalesLinks(existing?.salesLinks),
+      priceSettings: normalizePriceSettings(existing?.priceSettings),
+      periodSales: normalizePeriodSales(existing?.periodSales),
       note: existing?.note || "",
       codeChange: existing?.codeChange || "",
       inboundDate: existing?.inboundDate || "",
@@ -1481,6 +1676,8 @@ function applyOrderImport(table, fileName) {
       inSimpleStock: false,
       source: "",
       salesLinks: [],
+      priceSettings: [],
+      periodSales: [],
       note: "",
       codeChange: "",
       inboundDate: "",
@@ -1836,6 +2033,8 @@ function exportCsv() {
           item.orderQty,
           item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
           formatSalesLinksForCsv(item.salesLinks),
+          formatPriceSettingsForCsv(item.priceSettings),
+          formatPeriodSalesForCsv(item.periodSales),
           item.note,
           formatHistoryForCsv(item.history),
           formatDate(item.updatedAt),
@@ -1951,6 +2150,86 @@ function toInteger(value, fallback) {
 function toOptionalInteger(value) {
   const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function normalizePriceSettings(value, keepEmpty = false) {
+  return Array.isArray(value)
+    ? value
+        .slice(0, 30)
+        .map((entry) => ({
+          id: String(entry?.id || createId()),
+          oldPrice: cleanNumberText(entry?.oldPrice),
+          newPrice: cleanNumberText(entry?.newPrice),
+          date: String(entry?.date || "").trim(),
+          soldQty: cleanNumberText(entry?.soldQty),
+          memo: String(entry?.memo || "").trim(),
+        }))
+        .filter((entry) => keepEmpty || hasPriceSettingContent(entry))
+    : [];
+}
+
+function createEmptyPriceSetting(id = createId()) {
+  return { id: String(id || createId()), oldPrice: "", newPrice: "", date: "", soldQty: "", memo: "" };
+}
+
+function hasPriceSettingContent(entry) {
+  return Boolean(entry && (entry.oldPrice || entry.newPrice || entry.date || entry.soldQty || entry.memo));
+}
+
+function formatPriceSettingForHistory(entry) {
+  if (!entry) return "";
+  const priceText = entry.oldPrice || entry.newPrice ? `${entry.oldPrice || "-"} -> ${entry.newPrice || "-"}` : "";
+  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
+  return [priceText, entry.date, qtyText, entry.memo].filter(Boolean).join(" / ");
+}
+
+function normalizePeriodSales(value, keepEmpty = false) {
+  return Array.isArray(value)
+    ? value
+        .slice(0, 30)
+        .map((entry) => ({
+          id: String(entry?.id || createId()),
+          startDate: String(entry?.startDate || "").trim(),
+          endDate: String(entry?.endDate || "").trim(),
+          soldQty: cleanNumberText(entry?.soldQty),
+          memo: String(entry?.memo || "").trim(),
+        }))
+        .filter((entry) => keepEmpty || hasPeriodSaleContent(entry))
+    : [];
+}
+
+function createEmptyPeriodSale(id = createId()) {
+  return { id: String(id || createId()), startDate: "", endDate: "", soldQty: "", memo: "" };
+}
+
+function hasPeriodSaleContent(entry) {
+  return Boolean(entry && (entry.startDate || entry.endDate || entry.soldQty || entry.memo));
+}
+
+function formatPeriodSaleForHistory(entry) {
+  if (!entry) return "";
+  const periodText = entry.startDate || entry.endDate ? `${entry.startDate || "-"} ~ ${entry.endDate || "-"}` : "";
+  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
+  return [periodText, qtyText, entry.memo].filter(Boolean).join(" / ");
+}
+
+function formatPriceTrackingSearch(item) {
+  return [
+    ...normalizePriceSettings(item.priceSettings).map(formatPriceSettingForHistory),
+    ...normalizePeriodSales(item.periodSales).map(formatPeriodSaleForHistory),
+  ].join(" ");
+}
+
+function formatPriceSettingsForCsv(rows) {
+  return normalizePriceSettings(rows).map(formatPriceSettingForHistory).join(" | ");
+}
+
+function formatPeriodSalesForCsv(rows) {
+  return normalizePeriodSales(rows).map(formatPeriodSaleForHistory).join(" | ");
+}
+
+function cleanNumberText(value) {
+  return String(value || "").replace(/[^\d.-]/g, "").trim();
 }
 
 function normalizeSalesLinks(value, keepEmpty = false) {

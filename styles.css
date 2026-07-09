@@ -1321,3 +1321,111 @@ tr.row-low5 td {
   font-weight: 900;
   white-space: nowrap;
 }
+
+
+.price-mode-bar {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.price-mode-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.price-mode-button.active {
+  border-color: rgba(25, 167, 245, 0.28);
+  background: rgba(25, 167, 245, 0.1);
+  color: var(--blue-strong);
+}
+
+.price-tracking-cell {
+  min-width: 760px;
+  max-width: 940px;
+}
+
+.price-tracking-head,
+.price-tracking-row {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.price-date-head,
+.price-date-row {
+  grid-template-columns: 96px 96px 110px 72px minmax(160px, 1fr) 58px;
+}
+
+.period-sale-head,
+.period-sale-row {
+  grid-template-columns: 110px 110px 72px minmax(220px, 1fr) 58px;
+}
+
+.price-tracking-head {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.price-tracking-list {
+  display: grid;
+  gap: 6px;
+}
+
+.price-tracking-row input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f7f9fb;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  outline: none;
+  padding: 0 8px;
+}
+
+.price-tracking-row input:focus {
+  border-color: var(--blue);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(25, 167, 245, 0.14);
+}
+
+.price-tracking-add,
+.price-tracking-delete {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--blue-strong);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.price-tracking-add {
+  margin-top: 8px;
+  padding: 0 10px;
+}
+
+.price-tracking-delete {
+  color: var(--danger);
+}
+
+.price-tracking-row input:disabled,
+.price-tracking-add:disabled,
+.price-tracking-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
