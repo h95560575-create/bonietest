@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=notehide-20260709" />
+    <link rel="stylesheet" href="styles.css?v=change-tab-20260709" />
   </head>
   <body>
     <div class="app-shell">
@@ -34,8 +34,8 @@
             <span>마이너스</span>
             <strong id="negativeCount">0</strong>
           </button>
-          <button class="metric warning" data-jump-tab="stockChange" type="button">
-            <span>10개 미만 변동</span>
+          <button class="metric warning" data-jump-tab="allStockChanges" type="button">
+            <span>변동내역</span>
             <strong id="watchCount">0</strong>
           </button>
         </section>
@@ -43,7 +43,6 @@
         <section class="control-bar">
           <nav class="tabs" aria-label="재고 보기">
             <button class="tab" data-tab="watch" type="button">보류필요</button>
-            <button class="tab" data-tab="stockChange" type="button">10개 미만 변동</button>
             <button class="tab" data-tab="allStockChanges" type="button">변동내역</button>
             <button class="tab" data-tab="negative" type="button">마이너스</button>
             <button class="tab" data-tab="import" type="button">파일등록</button>
@@ -80,6 +79,13 @@
             <div class="price-mode-bar" id="priceModeBar" hidden>
               <button class="price-mode-button active" data-price-mode="priceDate" type="button">가격설정 기준</button>
               <button class="price-mode-button" data-price-mode="period" type="button">기간설정 기준</button>
+            </div>
+            <div class="change-filter-bar" id="changeFilterBar" hidden>
+              <button class="change-filter-button active" data-change-filter="all" type="button">전체</button>
+              <button class="change-filter-button" data-change-filter="down" type="button">감소만</button>
+              <button class="change-filter-button" data-change-filter="up" type="button">증가만</button>
+              <button class="change-filter-button" data-change-filter="negative" type="button">마이너스만</button>
+              <button class="change-filter-button" data-change-filter="hold" type="button">보류 변동만</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -201,6 +207,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=notehide-20260709"></script>
+    <script src="app.js?v=change-tab-20260709"></script>
   </body>
 </html>

@@ -79,6 +79,7 @@ let state = loadState();
 let activeTab = "all";
 let activeView = "all";
 let priceMode = "priceDate";
+let changeFilter = "all";
 let currentPage = 1;
 let serverSyncEnabled = false;
 let saveDebounceId = null;
@@ -107,6 +108,7 @@ const els = {
   sortSelect: document.getElementById("sortSelect"),
   panelToolbar: document.querySelector(".panel-toolbar"),
   priceModeBar: document.getElementById("priceModeBar"),
+  changeFilterBar: document.getElementById("changeFilterBar"),
   exportBtn: document.getElementById("exportBtn"),
   adminBtn: document.getElementById("adminBtn"),
   loginBtn: document.getElementById("loginBtn"),
@@ -154,6 +156,10 @@ document.querySelectorAll("[data-view]").forEach((button) => {
 
 document.querySelectorAll("[data-price-mode]").forEach((button) => {
   button.addEventListener("click", () => setPriceMode(button.dataset.priceMode));
+});
+
+document.querySelectorAll("[data-change-filter]").forEach((button) => {
+  button.addEventListener("click", () => setChangeFilter(button.dataset.changeFilter));
 });
 
 els.searchInput.addEventListener("input", () => {
@@ -400,8 +406,8 @@ async function refreshSharedState() {
 function render() {
   const items = state.items.filter(isVisibleInventoryItem).map((item) => ({ ...item, status: getStatus(item) }));
   const total = items.length;
-  const negative = items.filter((item) => item.status.key === "negative").length;
-  const watch = items.filter(hasLowStockChange).length;
+  const negative = items.filter(isNegativeTabItem).length;
+  const watch = items.filter(hasAnyStockChange).length;
 
   els.totalCount.textContent = formatNumber(total);
   els.negativeCount.textContent = formatNumber(negative);
@@ -419,6 +425,13 @@ function render() {
     els.priceModeBar.hidden = !(activeTab === "all" && activeView === "price");
     document.querySelectorAll("[data-price-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.priceMode === priceMode);
+    });
+  }
+
+  if (els.changeFilterBar) {
+    els.changeFilterBar.hidden = activeTab !== "allStockChanges";
+    document.querySelectorAll("[data-change-filter]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.changeFilter === changeFilter);
     });
   }
 
@@ -492,6 +505,7 @@ function getVisibleColumns() {
 }
 
 function getColumnHeaderClass(key) {
+  if (key === "inboundQty") return "center-head";
   if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
   if (["status", "parentCode", "mainCode", "simpleStatus", "history"].includes(key)) return "center-head";
   if (["inboundDate", "updatedAt", "depletionDate"].includes(key)) return "date-head";
@@ -519,7 +533,8 @@ function renderCell(item, column) {
     if (["stock", "processingStock", "availableStock"].includes(column.key)) {
       return renderStockNumberCell(item, column.key, value);
     }
-    return `<td class="number-cell">${formatNumber(value)}</td>`;
+    const extraClass = column.key === "inboundQty" ? " inbound-qty-cell" : "";
+    return `<td class="number-cell${extraClass}">${formatNumber(value)}</td>`;
   }
   if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
   if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서/기존자료"}</td>`;
@@ -1298,10 +1313,54 @@ function getUrgentRank(item) {
 }
 
 function matchesActiveTab(item) {
-  if (activeTab === "all") return true;
-  if (activeTab === "stockChange") return hasLowStockChange(item);
-  if (activeTab === "allStockChanges") return hasAnyStockChange(item);
+  if (activeTab === "all") return isApprovedSimpleItem(item);
+  if (activeTab === "allStockChanges") return matchesChangeFilter(item);
+  if (activeTab === "negative") return isNegativeTabItem(item);
   return item.status.key === activeTab;
+}
+
+function matchesChangeFilter(item) {
+  if (!hasAnyStockChange(item)) return false;
+  if (changeFilter === "down") return hasDecreaseChange(item);
+  if (changeFilter === "up") return hasIncreaseChange(item);
+  if (changeFilter === "negative") return item.availableStock < 0;
+  if (changeFilter === "hold") return hasHoldStockMovement(item);
+  return true;
+}
+
+function hasDecreaseChange(item) {
+  return ["stock", "processingStock", "availableStock"].some((key) => {
+    const pair = getStockChangePair(item, key);
+    return pair && pair.current < pair.previous;
+  });
+}
+
+function hasIncreaseChange(item) {
+  return ["stock", "processingStock", "availableStock"].some((key) => {
+    const pair = getStockChangePair(item, key);
+    return pair && pair.current > pair.previous;
+  });
+}
+
+function isApprovedSimpleItem(item) {
+  return normalizeSimpleStatus(item.simpleStatus) === "승인";
+}
+
+function isHoldSimpleItem(item) {
+  return normalizeSimpleStatus(item.simpleStatus) === "보류";
+}
+
+function isNegativeTabItem(item) {
+  return item.status.key === "negative" || hasHoldStockMovement(item);
+}
+
+function hasHoldStockMovement(item) {
+  if (item.parentCode || !isHoldSimpleItem(item)) return false;
+  const availableStock = item.stock - item.processingStock;
+  return (
+    availableStock !== 0 ||
+    Boolean(getStockChangePair(item, "stock") || getStockChangePair(item, "processingStock") || getStockChangePair(item, "availableStock"))
+  );
 }
 
 function shouldShowNewAlertDot(item) {
@@ -2051,7 +2110,7 @@ function exportStockChangesCsv() {
     ...state.items
       .filter(isVisibleInventoryItem)
       .map((item) => ({ ...item, status: getStatus(item) }))
-      .filter(hasAnyStockChange)
+      .filter(matchesChangeFilter)
       .sort(sortItems)
       .map((item) => [
         item.code,

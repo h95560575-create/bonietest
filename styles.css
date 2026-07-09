@@ -547,6 +547,11 @@ tbody tr:hover td {
   text-align: right;
 }
 
+.inbound-qty-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
 .number-value {
   display: inline-block;
 }
@@ -610,8 +615,7 @@ tbody tr:hover td {
   font-weight: 950;
 }
 
-.depletion-cell span,
-.depletion-rate-cell {
+.depletion-cell span {
   display: block;
   margin-top: 2px;
   color: var(--muted);
@@ -621,6 +625,12 @@ tbody tr:hover td {
 
 .depletion-rate-cell {
   min-width: 108px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.4;
+  text-align: center;
+  vertical-align: middle;
   white-space: nowrap;
 }
 
@@ -1433,4 +1443,30 @@ tr.row-low5 td {
 .price-tracking-delete:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+
+.change-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.change-filter-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.change-filter-button.active {
+  border-color: rgba(25, 167, 245, 0.28);
+  background: rgba(25, 167, 245, 0.1);
+  color: var(--blue-strong);
 }
