@@ -20,8 +20,6 @@ const itemFields = [
   { key: "code", type: "code" },
   { key: "codeChange", type: "text" },
   { key: "parentCode", type: "boolean" },
-  { key: "mainCode", type: "code" },
-  { key: "inventoryOrder", type: "number" },
   { key: "simpleStatus", type: "simpleStatus" },
   { key: "name", type: "text" },
   { key: "stock", type: "number" },
@@ -33,19 +31,13 @@ const itemFields = [
   { key: "availableStock", type: "signedNumber" },
   { key: "previousAvailableStock", type: "optionalSignedNumber" },
   { key: "availableStockDelta", type: "signedNumber" },
-  { key: "previousStockChangedAt", type: "text" },
   { key: "stockChangedAt", type: "text" },
   { key: "inboundDate", type: "text" },
   { key: "inboundQty", type: "number" },
   { key: "orderQty", type: "number" },
   { key: "inSimpleStock", type: "boolean" },
   { key: "hiddenFromInventory", type: "boolean" },
-  { key: "autoZeroHidden", type: "boolean" },
   { key: "source", type: "text" },
-  { key: "salesLinks", type: "salesLinks" },
-  { key: "priceSettings", type: "priceSettings" },
-  { key: "periodSales", type: "periodSales" },
-  { key: "stockLogs", type: "stockLogs" },
   { key: "note", type: "text" },
   { key: "history", type: "history" },
 ];
@@ -64,16 +56,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
-    if (url.pathname === "/api/health") return sendJson(res, {
-      ok: true,
-      secureMode: isSupabaseConfigured(),
-      env: {
-        supabaseUrl: Boolean(SUPABASE_URL),
-        supabaseAnonKey: Boolean(SUPABASE_ANON_KEY),
-        supabaseServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY),
-        nodeEnv: process.env.NODE_ENV || "",
-      },
-    });
+    if (url.pathname === "/api/health") return sendJson(res, { ok: true, secureMode: isSupabaseConfigured() });
     if (url.pathname === "/api/auth/login") return handleLogin(req, res);
     if (url.pathname === "/api/auth/logout") return handleLogout(req, res);
     if (url.pathname === "/api/auth/me") return handleMe(req, res);
@@ -84,7 +67,7 @@ const server = http.createServer(async (req, res) => {
     await serveStatic(url.pathname, res, req.method === "HEAD");
   } catch (error) {
     console.error(error);
-    sendJson(res, { error: error.statusCode === 403 ? error.message : "Internal server error" }, error.statusCode || 500);
+    sendJson(res, { error: "Internal server error" }, 500);
   }
 });
 
@@ -134,8 +117,6 @@ async function handleStateApi(req, res) {
   if (req.method === "PUT") {
     const body = await readJsonBody(req);
     const state = sanitizeState(body);
-    const previousState = await readState(auth);
-    assertCanWriteState(previousState, state, auth.profile);
     await writeState(state, auth);
     return sendJson(res, state);
   }
@@ -278,22 +259,18 @@ async function findProfileByUserId(userId) {
 async function supabaseRest(pathname, method, body, extraHeaders = {}) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, {
     method,
-    headers: supabaseRestHeaders({
+    headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
       ...extraHeaders,
-    }),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) throw new Error(`Supabase REST error ${response.status}: ${await response.text()}`);
   if (response.status === 204) return null;
   const text = await response.text();
   return text ? JSON.parse(text) : null;
-}
-
-function supabaseRestHeaders(headers) {
-  if (SUPABASE_SERVICE_ROLE_KEY.startsWith("sb_secret_")) return headers;
-  return { ...headers, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` };
 }
 
 async function supabaseAuth(pathname, method, bearer, body) {
@@ -343,8 +320,8 @@ function sanitizeState(input) {
           .map((entry) => ({
             id: String(entry?.id || crypto.randomUUID()),
             at: validDateOr(entry?.at, now),
-            title: renameLegacyMainCodeText(entry?.title).slice(0, 80),
-            detail: renameLegacyMainCodeText(entry?.detail).slice(0, 500),
+            title: String(entry?.title || "").slice(0, 80),
+            detail: String(entry?.detail || "").slice(0, 500),
           }))
           .filter((entry) => entry.title || entry.detail)
       : [],
@@ -364,85 +341,7 @@ function sanitizeItemField(value, field) {
   if (field.type === "code") return normalizeCode(value);
   if (field.type === "simpleStatus") return normalizeSimpleStatus(value);
   if (field.type === "history") return sanitizeHistory(value);
-  if (field.type === "salesLinks") return sanitizeSalesLinks(value);
-  if (field.type === "priceSettings") return sanitizePriceSettings(value);
-  if (field.type === "periodSales") return sanitizePeriodSales(value);
-  if (field.type === "stockLogs") return sanitizeStockLogs(value);
   return String(value || "").trim();
-}
-
-function sanitizeSalesLinks(value) {
-  return Array.isArray(value)
-    ? value
-        .slice(0, 20)
-        .map((entry) => ({
-          id: String(entry?.id || crypto.randomUUID()),
-          platform: String(entry?.platform || "").trim().slice(0, 80),
-          productName: String(entry?.productName || "").trim().slice(0, 160),
-          qty: String(entry?.qty || "").trim().slice(0, 20),
-          url: String(entry?.url || "").trim().slice(0, 500),
-        }))
-        .filter((entry) => entry.platform || entry.productName || entry.qty || entry.url)
-    : [];
-}
-
-function sanitizePriceSettings(value) {
-  return Array.isArray(value)
-    ? value
-        .slice(0, 30)
-        .map((entry) => ({
-          id: String(entry?.id || crypto.randomUUID()),
-          oldPrice: cleanNumberText(entry?.oldPrice).slice(0, 20),
-          newPrice: cleanNumberText(entry?.newPrice).slice(0, 20),
-          date: String(entry?.date || "").trim().slice(0, 40),
-          soldQty: cleanNumberText(entry?.soldQty).slice(0, 20),
-          memo: String(entry?.memo || "").trim().slice(0, 300),
-        }))
-        .filter((entry) => entry.oldPrice || entry.newPrice || entry.date || entry.soldQty || entry.memo)
-    : [];
-}
-
-function sanitizePeriodSales(value) {
-  return Array.isArray(value)
-    ? value
-        .slice(0, 30)
-        .map((entry) => ({
-          id: String(entry?.id || crypto.randomUUID()),
-          startDate: String(entry?.startDate || "").trim().slice(0, 40),
-          endDate: String(entry?.endDate || "").trim().slice(0, 40),
-          soldQty: cleanNumberText(entry?.soldQty).slice(0, 20),
-          memo: String(entry?.memo || "").trim().slice(0, 300),
-        }))
-        .filter((entry) => entry.startDate || entry.endDate || entry.soldQty || entry.memo)
-    : [];
-}
-
-function sanitizeStockLogs(value) {
-  return Array.isArray(value)
-    ? value
-        .slice(-800)
-        .map((entry) => ({
-          id: String(entry?.id || crypto.randomUUID()),
-          at: validDateOr(entry?.at, ""),
-          source: String(entry?.source || "").trim().slice(0, 200),
-          stockBefore: optionalSignedNumber(entry?.stockBefore),
-          stockAfter: optionalSignedNumber(entry?.stockAfter),
-          processingBefore: optionalSignedNumber(entry?.processingBefore),
-          processingAfter: optionalSignedNumber(entry?.processingAfter),
-          availableBefore: optionalSignedNumber(entry?.availableBefore),
-          availableAfter: optionalSignedNumber(entry?.availableAfter),
-        }))
-        .filter((entry) => entry.at)
-    : [];
-}
-
-function cleanNumberText(value) {
-  return String(value || "").replace(/[^\d.-]/g, "").trim();
-}
-
-function optionalSignedNumber(value) {
-  const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
-  return Number.isFinite(parsed) ? Math.min(9999999, Math.max(-9999999, Math.trunc(parsed))) : null;
 }
 
 function sanitizeHistory(value) {
@@ -454,16 +353,12 @@ function sanitizeHistory(value) {
           id: String(entry?.id || crypto.randomUUID()),
           at: validDateOr(entry?.at, now),
           author: String(entry?.author || "작성자 미확인").slice(0, 40),
-          field: renameLegacyMainCodeText(entry?.field).slice(0, 40),
-          before: renameLegacyMainCodeText(entry?.before).slice(0, 300),
-          after: renameLegacyMainCodeText(entry?.after).slice(0, 300),
+          field: String(entry?.field || "").slice(0, 40),
+          before: String(entry?.before || "").slice(0, 300),
+          after: String(entry?.after || "").slice(0, 300),
         }))
         .filter((entry) => entry.field)
     : [];
-}
-
-function renameLegacyMainCodeText(value) {
-  return String(value || "").trim().replace(/엄마코드/g, "메인코드").replace(/엄마/g, "메인");
 }
 
 function sanitizeProfilePatch(input) {
@@ -476,46 +371,6 @@ function sanitizeProfilePatch(input) {
     else patch[key] = Boolean(input[key]);
   });
   return patch;
-}
-
-function assertCanWriteState(previousState, nextState, profile) {
-  if (profile?.role === "admin") return;
-  const previousByCode = new Map((previousState.items || []).map((item) => [item.code, item]));
-  const nextByCode = new Map((nextState.items || []).map((item) => [item.code, item]));
-  const allCodes = new Set([...previousByCode.keys(), ...nextByCode.keys()]);
-
-  for (const code of allCodes) {
-    const before = previousByCode.get(code);
-    const after = nextByCode.get(code);
-    if (!before || !after) {
-      requireProfilePermission(profile, "can_upload_inventory");
-      continue;
-    }
-    if (changedAny(before, after, ["stock", "previousStock", "stockDelta", "processingStock", "previousProcessingStock", "processingStockDelta", "availableStock", "previousAvailableStock", "availableStockDelta", "previousStockChangedAt", "stockChangedAt", "stockLogs", "simpleStatus", "name", "orderQty", "inSimpleStock", "hiddenFromInventory", "autoZeroHidden", "source", "inventoryOrder"])) {
-      requireProfilePermission(profile, "can_upload_inventory");
-    }
-    if (changedAny(before, after, ["note"])) {
-      requireProfilePermission(profile, "can_edit_memo");
-    }
-    if (changedAny(before, after, ["inboundDate", "inboundQty"])) {
-      requireProfilePermission(profile, "can_edit_schedule");
-    }
-    if (changedAny(before, after, ["codeChange", "parentCode", "mainCode", "salesLinks", "priceSettings", "periodSales"])) {
-      requireProfilePermission(profile, "can_manage_links");
-    }
-  }
-}
-
-function changedAny(before, after, keys) {
-  return keys.some((key) => JSON.stringify(before?.[key] ?? null) !== JSON.stringify(after?.[key] ?? null));
-}
-
-function requireProfilePermission(profile, key) {
-  if (!profile?.[key]) {
-    const error = new Error("권한이 부족합니다.");
-    error.statusCode = 403;
-    throw error;
-  }
 }
 
 function publicProfile(profile) {

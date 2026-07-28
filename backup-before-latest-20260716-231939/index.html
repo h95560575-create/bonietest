@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=period-sales-20260709" />
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -18,7 +18,6 @@
         </div>
         <div class="top-actions">
           <button class="button" id="exportBtn" type="button">CSV 내보내기</button>
-          <button class="button subtle" id="adminBtn" type="button" hidden>관리자모드</button>
           <button class="button primary" id="loginBtn" type="button">로그인</button>
           <!-- <button class="button subtle" id="clearDataBtn" type="button">초기화</button> -->
         </div>
@@ -34,8 +33,8 @@
             <span>마이너스</span>
             <strong id="negativeCount">0</strong>
           </button>
-          <button class="metric warning" data-jump-tab="allStockChanges" type="button">
-            <span>변동내역</span>
+          <button class="metric warning" data-jump-tab="stockChange" type="button">
+            <span>10개 미만 변동</span>
             <strong id="watchCount">0</strong>
           </button>
         </section>
@@ -43,9 +42,9 @@
         <section class="control-bar">
           <nav class="tabs" aria-label="재고 보기">
             <button class="tab" data-tab="watch" type="button">보류필요</button>
-            <button class="tab" data-tab="allStockChanges" type="button">변동내역</button>
+            <button class="tab" data-tab="stockChange" type="button">10개 미만 변동</button>
             <button class="tab" data-tab="negative" type="button">마이너스</button>
-            <button class="tab" data-tab="zeroHidden" type="button">자동숨김</button>
+            <button class="tab" data-tab="low5" type="button">5개 이하</button>
             <button class="tab" data-tab="import" type="button">파일등록</button>
           </nav>
           <div class="filters">
@@ -57,14 +56,6 @@
               <span>검색</span>
               <input id="searchInput" type="search" placeholder="상품코드, 상품명" autocomplete="off" />
             </label>
-            <label class="field sort-field">
-              <span>가용재고 정렬</span>
-              <select id="sortSelect">
-                <option value="default">기본순서</option>
-                <option value="availableDesc">많은순</option>
-                <option value="availableAsc">적은순</option>
-              </select>
-            </label>
           </div>
         </section>
 
@@ -74,24 +65,7 @@
               <button class="view-tab active" data-view="all" type="button">전체</button>
               <button class="view-tab" data-view="stock" type="button">재고/일정</button>
               <button class="view-tab" data-view="catalog" type="button">구성/링크</button>
-              <button class="view-tab" data-view="depletion" type="button">소진예상일</button>
-              <button class="view-tab" data-view="price" type="button">가격조정</button>
             </nav>
-            <div class="price-mode-bar" id="priceModeBar" hidden>
-              <button class="price-mode-button active" data-price-mode="priceDate" type="button">가격설정 기준</button>
-              <button class="price-mode-button" data-price-mode="period" type="button">기간 판매 조회</button>
-            </div>
-            <div class="period-query-bar" id="periodQueryBar" hidden>
-              <label>시작일 <input id="periodStartInput" type="date" /></label>
-              <label>종료일 <input id="periodEndInput" type="date" /></label>
-            </div>
-            <div class="change-filter-bar" id="changeFilterBar" hidden>
-              <button class="change-filter-button active" data-change-filter="all" type="button">전체</button>
-              <button class="change-filter-button" data-change-filter="down" type="button">감소만</button>
-              <button class="change-filter-button" data-change-filter="up" type="button">증가만</button>
-              <button class="change-filter-button" data-change-filter="negative" type="button">마이너스만</button>
-              <button class="change-filter-button" data-change-filter="hold" type="button">보류 변동만</button>
-            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -183,8 +157,16 @@
         </div>
         <form class="login-form" id="loginForm">
           <label class="field">
-            <span>아이디</span>
-            <input id="loginName" type="text" placeholder="아이디" autocomplete="username" required />
+            <span>이름</span>
+            <select id="loginName" required>
+              <option value="">선택</option>
+              <option value="주현">주현</option>
+              <option value="미희">미희</option>
+              <option value="경아">경아</option>
+              <option value="하은(전)">하은(전)</option>
+              <option value="하은(안)">하은(안)</option>
+              <option value="관리자">관리자</option>
+            </select>
           </label>
           <label class="field">
             <span>비밀번호</span>
@@ -198,20 +180,6 @@
       </section>
     </div>
 
-    <div class="modal-backdrop" id="adminModal" hidden>
-      <section class="history-modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
-        <div class="history-modal-head">
-          <div>
-            <span>관리자 전용</span>
-            <h2 id="adminTitle">사용자 권한</h2>
-          </div>
-          <button class="icon-button" id="adminCloseBtn" type="button" aria-label="닫기">×</button>
-        </div>
-        <div class="admin-user-list" id="adminUserList"></div>
-        <p class="login-message" id="adminMessage"></p>
-      </section>
-    </div>
-
-    <script src="app.js?v=columns-20260728"></script>
+    <script src="app.js"></script>
   </body>
 </html>
