@@ -224,6 +224,7 @@ els.pageNumberList.addEventListener("click", (event) => {
   render();
 });
 els.inventoryHead.addEventListener("click", handleHeaderSortClick);
+els.inventoryHead.addEventListener("change", handleSelectionChange);
 els.exportBtn.addEventListener("click", exportCsv);
 if (els.autoHiddenToggleBtn) els.autoHiddenToggleBtn.addEventListener("click", toggleAutoHiddenInAll);
 if (els.selectedDownloadBtn) els.selectedDownloadBtn.addEventListener("click", exportSelectedItems);
@@ -2262,14 +2263,14 @@ function getCurrentPageRows() {
 }
 
 function areVisibleRowsSelected() {
-  const rows = getCurrentPageRows();
+  const rows = getCurrentVisibleRows();
   return rows.length > 0 && rows.every((item) => selectedItemCodes.has(item.code));
 }
 
 function handleSelectionChange(event) {
   const visibleCheckbox = event.target.closest("[data-select-visible]");
   if (visibleCheckbox) {
-    getCurrentPageRows().forEach((item) => {
+    getCurrentVisibleRows().forEach((item) => {
       if (visibleCheckbox.checked) selectedItemCodes.add(item.code);
       else selectedItemCodes.delete(item.code);
     });
