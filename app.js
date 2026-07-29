@@ -489,11 +489,14 @@ function render() {
     els.autoHiddenToggleBtn.textContent = showAutoHiddenInAll ? "일반 목록 보기" : "자동숨김 보기";
   }
   if (els.selectedDownloadBtn) {
-    els.selectedDownloadBtn.hidden = !((activeTab === "all" && activeView === "all") || activeTab === "allStockChanges");
-    els.selectedDownloadBtn.textContent = selectedItemCodes.size ? `선택 목록 다운로드 (${selectedItemCodes.size})` : "선택 목록 다운로드";
+    const selectedVisibleCount = getSelectedVisibleRows().length;
+    els.selectedDownloadBtn.hidden = activeTab === "import";
+    els.selectedDownloadBtn.textContent = selectedVisibleCount ? `선택 목록 다운로드 (${selectedVisibleCount})` : "선택 목록 다운로드";
   }
 
   els.inventoryPanel.hidden = false;
+  els.inventoryPanel.dataset.activeTab = activeTab;
+  els.inventoryPanel.dataset.activeView = activeView;
   els.importPanel.hidden = activeTab !== "import";
   if (els.tableWrap) els.tableWrap.hidden = activeTab === "import";
   if (activeTab === "import") {
@@ -557,7 +560,7 @@ function renderRow(item, rowNumber = 0) {
 function getVisibleColumns() {
   const viewKey = activeTab === "watch" ? "watch" : activeView === "price" ? priceMode : activeView;
   let keys = VIEW_COLUMNS[viewKey] || VIEW_COLUMNS.all;
-  if (!((activeTab === "all" && activeView === "all") || activeTab === "allStockChanges")) keys = keys.filter((key) => key !== "select");
+  if (activeTab !== "import" && !keys.includes("select")) keys = ["select", ...keys];
   return keys.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean);
 }
 
@@ -592,7 +595,7 @@ function handleHeaderSortClick(event) {
 function getColumnHeaderClass(key) {
   if (key === "select") return "select-head";
   if (key === "sequence") return "sequence-head";
-  if (key === "inboundQty") return "center-head";
+  if (key === "inboundQty") return "center-head inbound-qty-head";
   if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
   if (["status", "parentCode", "mainCode", "simpleStatus", "history"].includes(key)) return "center-head";
   if (["inboundDate", "updatedAt", "depletionDate"].includes(key)) return "date-head";

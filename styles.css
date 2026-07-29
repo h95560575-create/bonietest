@@ -373,6 +373,11 @@ table {
   border-spacing: 0;
 }
 
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] table {
+  table-layout: fixed;
+  min-width: 1160px;
+}
+
 thead {
   background: #fbfcfd;
 }
@@ -464,6 +469,40 @@ tbody tr:hover td {
   max-width: 380px;
 }
 
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .select-head,
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .select-cell {
+  width: 38px;
+  min-width: 38px;
+  max-width: 38px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .sequence-head,
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .sequence-cell {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .code-head,
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .code-cell {
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .name-cell {
+  width: 300px;
+  min-width: 300px;
+  max-width: 300px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .name-cell strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .name-line {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
@@ -545,6 +584,39 @@ tbody tr:hover td {
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .number-head,
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .number-cell {
+  width: 76px;
+  min-width: 76px;
+  max-width: 76px;
+  text-align: center;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .schedule-cell,
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .date-head {
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .inbound-qty-cell {
+  width: 82px;
+  min-width: 82px;
+  max-width: 82px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .inbound-qty-head {
+  width: 82px;
+  min-width: 82px;
+  max-width: 82px;
+}
+
+#inventoryPanel[data-active-tab="all"][data-active-view="stock"] .date-cell {
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
 }
 
 .inbound-qty-cell {
