@@ -333,8 +333,8 @@ function persist() {
   lastLocalChangeAt = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   els.saveStatus.textContent = serverSyncEnabled
-    ? `怨듭쑀 ????덉빟??${formatTime(new Date().toISOString())}`
-    : `濡쒖뺄 ??λ맖 ${formatTime(new Date().toISOString())}`;
+    ? `공유 저장 예약됨 ${formatTime(new Date().toISOString())}`
+    : `로컬 저장됨 ${formatTime(new Date().toISOString())}`;
   queueServerSave();
 }
 
@@ -352,11 +352,11 @@ async function bootSharedState() {
 
     if (!sharedState.items?.length && localState.items.length) {
       await saveSnapshotToServer(localState);
-      els.saveStatus.textContent = `濡쒖뺄 ?곗씠?곕? 怨듭쑀 ??μ냼濡??댁쟾??${formatTime(new Date().toISOString())}`;
+      els.saveStatus.textContent = `로컬 데이터를 공유 저장소로 이전함 ${formatTime(new Date().toISOString())}`;
     } else {
       replaceState(sharedState);
       render();
-      els.saveStatus.textContent = `怨듭쑀 ??μ냼 ?곌껐??${formatTime(new Date().toISOString())}`;
+      els.saveStatus.textContent = `공유 저장소 연결됨 ${formatTime(new Date().toISOString())}`;
     }
 
     setInterval(refreshSharedState, 15000);
@@ -377,7 +377,7 @@ function isServerBacked() {
 
 async function fetchSharedState() {
   const response = await fetch(API_STATE_URL, { headers: { Accept: "application/json" }, credentials: "same-origin" });
-  if (!response.ok) throw new Error(`怨듭쑀 ?곗씠??議고쉶 ?ㅽ뙣 (${response.status})`);
+  if (!response.ok) throw new Error(`공유 데이터 조회 실패 (${response.status})`);
   return response.json();
 }
 
@@ -399,7 +399,7 @@ async function saveStateToServer() {
   try {
     await saveSnapshotToServer(normalizeState(state));
     serverSyncEnabled = true;
-    els.saveStatus.textContent = `怨듭쑀 ??λ맖 ${formatTime(new Date().toISOString())}`;
+    els.saveStatus.textContent = `공유 저장됨 ${formatTime(new Date().toISOString())}`;
   } catch (error) {
     els.saveStatus.textContent = "공유 서버 연결 실패, 로컬 저장 중";
     console.warn(error);
@@ -416,7 +416,7 @@ async function saveSnapshotToServer(snapshot) {
     credentials: "same-origin",
     body: JSON.stringify(snapshot),
   });
-  if (!response.ok) throw new Error(`怨듭쑀 ????ㅽ뙣 (${response.status})`);
+  if (!response.ok) throw new Error(`공유 저장 실패 (${response.status})`);
   return response.json();
 }
 
@@ -427,7 +427,7 @@ async function refreshSharedState() {
     if (JSON.stringify(normalizeState(state)) !== JSON.stringify(sharedState)) {
       replaceState(sharedState);
       render();
-      els.saveStatus.textContent = `怨듭쑀 ?곗씠??媛깆떊??${formatTime(new Date().toISOString())}`;
+      els.saveStatus.textContent = `공유 데이터 갱신됨 ${formatTime(new Date().toISOString())}`;
     }
   } catch (error) {
     console.warn(error);
@@ -595,7 +595,7 @@ function renderCell(item, column, rowNumber = 0) {
     return `<td class="number-cell${extraClass}">${formatNumber(value)}</td>`;
   }
   if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
-  if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "?ы뵆 ?ш퀬紐⑸줉") : "二쇰Ц??湲곗〈?먮즺"}</td>`;
+  if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서 기준자료"}</td>`;
   if (column.key === "salesLinks") return renderSalesLinksCell(item);
   if (column.key === "priceSettings") return renderPriceSettingsCell(item);
   if (column.key === "periodSales") return renderPeriodSalesCell(item);
@@ -617,8 +617,8 @@ function renderNameCell(item) {
   return `
     <td class="name-cell ${hasDot ? "has-new-alert" : ""} ${isSubCode ? "is-sub-code" : ""}">
       <div class="name-line">
-        ${hasDot ? `<span class="new-alert-dot" title="?덈줈 ?앷릿 二쇱쓽 ?덈ぉ" aria-label="?덈줈 ?앷릿 二쇱쓽 ?덈ぉ"></span>` : ""}
-        ${isSubCode ? `<span class="sub-code-mark">??/span>` : ""}
+        ${hasDot ? `<span class="new-alert-dot" title="새로 생긴 주의 항목" aria-label="새로 생긴 주의 항목"></span>` : ""}
+        ${isSubCode ? `<span class="sub-code-mark">ㄴ</span>` : ""}
         <strong>${escapeHtml(item.name || "-")}</strong>
       </div>
     </td>
@@ -636,7 +636,7 @@ function handleTableEdit(event) {
   if (!item) return;
   if (event.target.matches("[data-note-input]")) {
     const nextValue = event.target.value.trim();
-    recordItemEdit(item, "硫붾え", item.note, nextValue);
+    recordItemEdit(item, "메모", item.note, nextValue);
     item.note = nextValue;
   } else if (event.target.matches("[data-sales-link-input]")) {
     updateSalesLinkField(item, event.target.dataset.linkId, event.target.dataset.field, event.target.value);
@@ -648,7 +648,7 @@ function handleTableEdit(event) {
     const nextValue = event.target.matches("[data-main-code-input]") ? normalizeCode(event.target.value) : event.target.value.trim();
     if (event.target.matches("[data-main-code-input]")) {
       const safeValue = nextValue === item.code ? "" : nextValue;
-      recordItemEdit(item, "?뚯냽 硫붿씤肄붾뱶", item.mainCode, safeValue);
+      recordItemEdit(item, "소속 메인코드", item.mainCode, safeValue);
       item.mainCode = safeValue;
     } else {
       recordItemEdit(item, "변경코드", item.codeChange, nextValue);
@@ -685,7 +685,7 @@ function updatePeriodSaleField(item, rowId, field, value) {
   const before = formatPeriodSaleForHistory(row);
   row[field] = field === "soldQty" ? cleanNumberText(value) : String(value || "").trim();
   item.periodSales = rows.filter(hasPeriodSaleContent);
-  recordItemEdit(item, "湲곌컙?먮ℓ", before, formatPeriodSaleForHistory(row));
+  recordItemEdit(item, "기간판매", before, formatPeriodSaleForHistory(row));
 }
 
 function updateSalesLinkField(item, linkId, field, value) {
@@ -699,13 +699,13 @@ function updateSalesLinkField(item, linkId, field, value) {
   const before = formatSalesLinkForHistory(link);
   link[field] = field === "qty" ? String(value || "").replace(/[^\d.-]/g, "").trim() : String(value || "").trim();
   item.salesLinks = links.filter(hasSalesLinkContent);
-  recordItemEdit(item, "?먮ℓ留곹겕", before, formatSalesLinkForHistory(link));
+  recordItemEdit(item, "판매링크", before, formatSalesLinkForHistory(link));
 }
 
 function renderCodeChangeCell(item) {
   return `
     <td class="code-change-cell">
-      <input data-code-change-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.codeChange || "")}" placeholder="?? 7004" />
+      <input data-code-change-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.codeChange || "")}" placeholder="예: 7004" />
     </td>
   `;
 }
@@ -713,7 +713,7 @@ function renderCodeChangeCell(item) {
 function renderMainCodeCell(item) {
   return `
     <td class="main-code-cell">
-      <input data-main-code-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.mainCode || "")}" placeholder="?? 9452" />
+      <input data-main-code-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.mainCode || "")}" placeholder="예: 9452" />
     </td>
   `;
 }
@@ -724,16 +724,16 @@ function renderSalesLinksCell(item) {
   return `
     <td class="sales-links-cell">
       <div class="sales-link-head" aria-hidden="true">
-        <span>?뚮옯??/span>
-        <span>?먮ℓ?곹뭹紐?/span>
-        <span>?섎웾</span>
-        <span>?곹뭹?섏씠吏留곹겕</span>
+        <span>플랫폼</span>
+        <span>판매상품명</span>
+        <span>수량</span>
+        <span>상품페이지링크</span>
         <span></span>
       </div>
       <div class="sales-link-list">
         ${rows.map((link) => renderSalesLinkRow(item, link)).join("")}
       </div>
-      <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">?먮ℓ留곹겕 異붽?</button>
+      <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">판매링크 추가</button>
     </td>
   `;
 }
@@ -742,11 +742,11 @@ function renderSalesLinkRow(item, link) {
   const isSaved = Boolean(link.id && normalizeSalesLinks(item.salesLinks, true).some((entry) => entry.id === link.id));
   return `
     <div class="sales-link-row">
-      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="platform" value="${escapeHtml(link.platform)}" placeholder="?ㅻ뒛?섏쭛" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="platform" value="${escapeHtml(link.platform)}" placeholder="오늘의집" />
       <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="productName" value="${escapeHtml(link.productName)}" placeholder="" />
-      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="qty" value="${escapeHtml(link.qty)}" placeholder="?섎웾" inputmode="numeric" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="qty" value="${escapeHtml(link.qty)}" placeholder="수량" inputmode="numeric" />
       <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="url" value="${escapeHtml(link.url)}" placeholder="https://..." />
-      <button class="sales-link-delete" data-sales-link-delete data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" type="button" ${isSaved ? "" : "disabled"}>??젣</button>
+      <button class="sales-link-delete" data-sales-link-delete data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
     </div>
   `;
 }
@@ -757,17 +757,17 @@ function renderPriceSettingsCell(item) {
   return `
     <td class="price-tracking-cell">
       <div class="price-tracking-head price-date-head" aria-hidden="true">
-        <span>湲곗〈媛寃?/span>
-        <span>議곗젙媛寃?/span>
-        <span>媛寃⑹꽕?뺤씪</span>
-        <span>?먮ℓ??/span>
-        <span>硫붾え</span>
+        <span>기존가격</span>
+        <span>조정가격</span>
+        <span>가격설정일</span>
+        <span>판매량</span>
+        <span>메모</span>
         <span></span>
       </div>
       <div class="price-tracking-list">
         ${displayRows.map((entry) => renderPriceSettingRow(item, entry)).join("")}
       </div>
-      <button class="price-tracking-add" data-price-add data-code="${escapeHtml(item.code)}" type="button">媛寃⑷린濡?異붽?</button>
+      <button class="price-tracking-add" data-price-add data-code="${escapeHtml(item.code)}" type="button">가격기록 추가</button>
     </td>
   `;
 }
@@ -781,7 +781,7 @@ function renderPriceSettingRow(item, entry) {
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="date" value="${escapeHtml(entry.date)}" placeholder="" />
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="" inputmode="numeric" />
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="" />
-      <button class="price-tracking-delete" data-price-delete data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>??젣</button>
+      <button class="price-tracking-delete" data-price-delete data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
     </div>
   `;
 }
@@ -798,10 +798,10 @@ function renderPeriodSalesCell(item) {
   return `
     <td class="period-sales-cell">
       <div class="period-sales-summary">
-        <strong>${formatNumber(stats.soldQty)}媛??먮ℓ</strong>
+        <strong>${formatNumber(stats.soldQty)}개 판매</strong>
         <span>${escapeHtml(formatPeriodRangeLabel(range))}</span>
-        <span>利앷? ${formatNumber(stats.increasedQty)}媛?/ ?쒕???${formatSignedNumber(stats.netChange)}媛?/span>
-        <span>湲곕줉 ${formatNumber(stats.logCount)}嫄?湲곗?</span>
+        <span>증가 ${formatNumber(stats.increasedQty)}개 / 차이 ${formatSignedNumber(stats.netChange)}개</span>
+        <span>기록 ${formatNumber(stats.logCount)}건 기준</span>
       </div>
     </td>
   `;
@@ -814,8 +814,8 @@ function renderPeriodSaleRow(item, entry) {
       <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="startDate" value="${escapeHtml(entry.startDate)}" placeholder="26.07.09" />
       <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="endDate" value="${escapeHtml(entry.endDate)}" placeholder="26.07.15" />
       <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="" inputmode="numeric" />
-      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="硫붾え" />
-      <button class="price-tracking-delete" data-period-delete data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>??젣</button>
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="메모" />
+      <button class="price-tracking-delete" data-period-delete data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
     </div>
   `;
 }
@@ -878,7 +878,7 @@ function handleTableClick(event) {
     const removed = rows.find((entry) => entry.id === deletePeriodButton.dataset.periodId);
     item.periodSales = rows.filter((entry) => entry.id !== deletePeriodButton.dataset.periodId);
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "湲곌컙?먮ℓ", formatPeriodSaleForHistory(removed), "??젣");
+    recordItemEdit(item, "기간판매", formatPeriodSaleForHistory(removed), "삭제");
     persist();
     render();
     return;
@@ -906,7 +906,7 @@ function handleTableClick(event) {
     const removed = links.find((entry) => entry.id === deleteSalesLinkButton.dataset.linkId);
     item.salesLinks = links.filter((entry) => entry.id !== deleteSalesLinkButton.dataset.linkId);
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "?먮ℓ留곹겕", formatSalesLinkForHistory(removed), "??젣");
+    recordItemEdit(item, "판매링크", formatSalesLinkForHistory(removed), "삭제");
     persist();
     render();
     return;
@@ -929,7 +929,7 @@ function handleTableClick(event) {
 function renderHistoryCell(item) {
   return `
     <td class="history-cell">
-      <button class="history-button" data-history-open data-code="${escapeHtml(item.code)}" type="button">湲곕줉蹂닿린</button>
+      <button class="history-button" data-history-open data-code="${escapeHtml(item.code)}" type="button">기록보기</button>
     </td>
   `;
 }
@@ -966,7 +966,7 @@ function renderStockChangeDetailCell(item, key) {
   const pair = getStockChangePair(item, stockKey);
   if (!pair) return `<td class="change-cell muted">${formatNumber(getCurrentStockValue(item, stockKey))}</td>`;
   const className = pair.current > pair.previous ? "change-up" : "change-down";
-  return `<td class="change-cell ${className}"><strong>${formatNumber(pair.previous)} ??${formatNumber(pair.current)}</strong></td>`;
+  return `<td class="change-cell ${className}"><strong>${formatNumber(pair.previous)} → ${formatNumber(pair.current)}</strong></td>`;
 }
 
 function getCurrentStockValue(item, key) {
@@ -1056,7 +1056,7 @@ function recordItemEdit(item, field, beforeValue, afterValue) {
     after: afterText,
   });
   item.history = item.history.slice(0, 100);
-  addActivity("?곹뭹 ?섏젙", `${author} / ${item.code} / ${field}`);
+  addActivity("상품 수정", `${author} / ${item.code} / ${field}`);
 }
 
 function openHistoryModal(item) {
@@ -1070,13 +1070,13 @@ function openHistoryModal(item) {
               <time>${escapeHtml(formatDate(entry.at))}</time>
               <div>
                 <strong>${escapeHtml(entry.author)} / ${escapeHtml(entry.field)}</strong>
-                <p>${escapeHtml(entry.before || "鍮덉뭏")} ??${escapeHtml(entry.after || "鍮덉뭏")}</p>
+                <p>${escapeHtml(entry.before || "빈칸")} → ${escapeHtml(entry.after || "빈칸")}</p>
               </div>
             </article>
           `,
         )
         .join("")
-    : `<div class="empty-state"><strong>?꾩쭅 ?섏젙 湲곕줉???놁뒿?덈떎.</strong></div>`;
+    : `<div class="empty-state"><strong>아직 수정 기록이 없습니다.</strong></div>`;
   els.historyModal.hidden = false;
 }
 
@@ -1117,7 +1117,7 @@ function setLoginUser(user) {
 
 function requireLogin(permissionKey = "") {
   if (currentUser && (!permissionKey || hasPermission(permissionKey))) return true;
-  openLoginModal(currentUser ? "???묒뾽????沅뚰븳???놁뒿?덈떎." : "?섏젙?섍굅???뚯씪???깅줉?섎젮硫?癒쇱? 濡쒓렇?명빐二쇱꽭??");
+  openLoginModal(currentUser ? "이 작업을 할 권한이 없습니다." : "수정하거나 파일을 등록하려면 먼저 로그인해주세요.");
   return false;
 }
 
@@ -1127,21 +1127,21 @@ function isLoggedIn() {
 
 function updateLoginLockedControls() {
   const locked = !isLoggedIn();
-  setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "?ш퀬紐⑸줉 ?깅줉 沅뚰븳???꾩슂?⑸땲??");
-  setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "二쇰Ц???깅줉 沅뚰븳???꾩슂?⑸땲??");
-  setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "?낃퀬?쇱젙 ?섏젙 沅뚰븳???꾩슂?⑸땲??");
+  setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
+  setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
+  setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
   document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete], [data-price-input], [data-price-add], [data-price-delete], [data-period-input], [data-period-add], [data-period-delete]").forEach((control) => {
-    setControlLock(control, locked || !hasPermission("manageLinks"), "蹂寃쎌퐫??硫붿씤肄붾뱶/?먮ℓ留곹겕 ?섏젙 沅뚰븳???꾩슂?⑸땲??");
+    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드, 메인코드, 판매링크 수정 권한이 필요합니다.");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
-    setControlLock(control, locked || !hasPermission("editMemo"), "硫붾え ?섏젙 沅뚰븳???꾩슂?⑸땲??");
+    setControlLock(control, locked || !hasPermission("editMemo"), "메모 수정 권한이 필요합니다.");
   });
 }
 
 function setControlLock(control, locked, message) {
   if (!control) return;
   control.disabled = locked;
-  control.title = locked ? (isLoggedIn() ? message : "濡쒓렇?????ъ슜?????덉뒿?덈떎.") : "";
+  control.title = locked ? (isLoggedIn() ? message : "로그인해야 사용할 수 있습니다.") : "";
 }
 
 async function handleLoginButton() {
@@ -1172,7 +1172,7 @@ async function handleLoginSubmit(event) {
   event.preventDefault();
   const loginId = els.loginName.value.trim();
   const password = els.loginPassword.value;
-  els.loginMessage.textContent = "濡쒓렇???뺤씤 以?..";
+  els.loginMessage.textContent = "로그인 확인 중...";
   try {
     const response = await fetch("/api/auth/login", {
       method: "POST",
@@ -1182,7 +1182,7 @@ async function handleLoginSubmit(event) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      els.loginMessage.textContent = data.error || "?꾩씠???먮뒗 鍮꾨?踰덊샇媛 留욎? ?딆뒿?덈떎.";
+      els.loginMessage.textContent = data.error || "아이디 또는 비밀번호가 맞지 않습니다.";
       return;
     }
     setLoginUser(data.user);
@@ -1190,23 +1190,23 @@ async function handleLoginSubmit(event) {
     await bootSharedState();
     render();
   } catch {
-    els.loginMessage.textContent = "濡쒓렇???쒕쾭???곌껐?섏? 紐삵뻽?듬땲??";
+    els.loginMessage.textContent = "로그인 서버에 연결하지 못했습니다.";
   }
 }
 
 async function openAdminModal() {
   if (!requireLogin("manageUsers")) return;
   els.adminModal.hidden = false;
-  els.adminMessage.textContent = "?ъ슜??紐⑸줉??遺덈윭?ㅻ뒗 以?..";
+  els.adminMessage.textContent = "사용자 목록을 불러오는 중...";
   try {
     const response = await fetch("/api/admin/users", { headers: { Accept: "application/json" }, credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "?ъ슜??紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??");
+    if (!response.ok) throw new Error(data.error || "사용자 목록을 불러오지 못했습니다.");
     els.adminUserList.innerHTML = data.users.map(renderAdminUserRow).join("");
     els.adminMessage.textContent = "";
   } catch (error) {
     els.adminUserList.innerHTML = "";
-    els.adminMessage.textContent = error.message || "愿由ъ옄紐⑤뱶瑜??댁? 紐삵뻽?듬땲??";
+    els.adminMessage.textContent = error.message || "관리자모드를 열지 못했습니다.";
   }
 }
 
@@ -1216,9 +1216,9 @@ function closeAdminModal() {
 
 function renderAdminUserRow(user) {
   const permissionLabels = [
-    ["uploadInventory", "?ш퀬?깅줉"],
-    ["editMemo", "硫붾え"],
-    ["editSchedule", "?낃퀬?쇱젙"],
+    ["uploadInventory", "재고등록"],
+    ["editMemo", "메모"],
+    ["editSchedule", "입고일정"],
     ["manageLinks", "변경코드"],
     ["manageUsers", "사용자관리"],
   ];
@@ -1230,7 +1230,7 @@ function renderAdminUserRow(user) {
       </div>
       <label class="admin-check">
         <input type="checkbox" data-admin-field="isActive" ${user.isActive ? "checked" : ""} />
-        ?ъ슜
+        사용
       </label>
       ${permissionLabels
         .map(
@@ -1266,7 +1266,7 @@ async function handleAdminPermissionChange(event) {
     if (serverKey) payload[serverKey] = field.checked;
   });
 
-  els.adminMessage.textContent = "沅뚰븳 ???以?..";
+  els.adminMessage.textContent = "권한 저장 중...";
   try {
     const response = await fetch("/api/admin/users", {
       method: "PUT",
@@ -1275,10 +1275,10 @@ async function handleAdminPermissionChange(event) {
       body: JSON.stringify(payload),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "沅뚰븳 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
-    els.adminMessage.textContent = "沅뚰븳????λ릺?덉뒿?덈떎.";
+    if (!response.ok) throw new Error(data.error || "권한 저장에 실패했습니다.");
+    els.adminMessage.textContent = "권한이 저장되었습니다.";
   } catch (error) {
-    els.adminMessage.textContent = error.message || "沅뚰븳 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.";
+    els.adminMessage.textContent = error.message || "권한 저장에 실패했습니다.";
     input.checked = !input.checked;
   }
 }
@@ -1295,27 +1295,27 @@ function renderParentCodeCell(item) {
 function renderSimpleStatus(value) {
   const status = normalizeSimpleStatus(value);
   if (!status) return `<span class="simple-status simple-status-empty">-</span>`;
-  const className = status === "?뱀씤" ? "simple-status-approved" : "simple-status-hold";
+  const className = status === "승인" ? "simple-status-approved" : "simple-status-hold";
   return `<span class="simple-status ${className}">${escapeHtml(status)}</span>`;
 }
 
 function getStatus(item) {
   if (item.parentCode) {
-    return { key: "parent", label: "硫붿씤肄붾뱶", className: "status-parent" };
+    return { key: "parent", label: "메인코드", className: "status-parent" };
   }
   if (item.availableStock < 0) {
-    return { key: "negative", label: "留덉씠?덉뒪", className: "status-soldout" };
+    return { key: "negative", label: "마이너스", className: "status-soldout" };
   }
   if (isHoldNeededItem(item)) {
-    return { key: "watch", label: "蹂대쪟?꾩슂", className: "status-watch" };
+    return { key: "watch", label: "보류필요", className: "status-watch" };
   }
   if (hasLowStockChange(item)) {
     return { key: "stockChange", label: "10개 미만 변동", className: "status-change" };
   }
   if (item.availableStock > 0 && item.availableStock <= 5) {
-    return { key: "low5", label: "5媛??댄븯", className: "status-low5" };
+    return { key: "low5", label: "5개 이하", className: "status-low5" };
   }
-  return { key: "ok", label: "?뺤긽", className: "status-ok" };
+  return { key: "ok", label: "정상", className: "status-ok" };
 }
 
 function sortItems(a, b) {
@@ -1422,11 +1422,11 @@ function hasIncreaseChange(item) {
 }
 
 function isApprovedSimpleItem(item) {
-  return normalizeSimpleStatus(item.simpleStatus) === "?뱀씤";
+  return normalizeSimpleStatus(item.simpleStatus) === "승인";
 }
 
 function isHoldSimpleItem(item) {
-  return normalizeSimpleStatus(item.simpleStatus) === "蹂대쪟";
+  return normalizeSimpleStatus(item.simpleStatus) === "보류";
 }
 
 function isNegativeTabItem(item) {
@@ -1461,7 +1461,7 @@ function isNewWatchItem(item) {
 
 function isHoldNeededItem(item) {
   return (
-    normalizeSimpleStatus(item.simpleStatus) === "?뱀씤" &&
+    normalizeSimpleStatus(item.simpleStatus) === "승인" &&
     item.stock === 0 &&
     item.processingStock === 0 &&
     item.availableStock === 0
@@ -1473,7 +1473,7 @@ function wasHoldNeededBefore(item) {
   const previousProcessingStock = Number.isFinite(item.previousProcessingStock) ? item.previousProcessingStock : item.processingStock;
   const previousAvailableStock = getPreviousAvailableStock(item);
   return (
-    normalizeSimpleStatus(item.simpleStatus) === "?뱀씤" &&
+    normalizeSimpleStatus(item.simpleStatus) === "승인" &&
     previousStock === 0 &&
     previousProcessingStock === 0 &&
     previousAvailableStock === 0
@@ -1499,7 +1499,7 @@ function renderStockChangeCell(item) {
   const previous = item.previousAvailableStock;
   const current = item.availableStock;
   const delta = item.availableStockDelta;
-  const direction = delta > 0 ? "利앷?" : "媛먯냼";
+  const direction = delta > 0 ? "증가" : "감소";
   const className = delta > 0 ? "change-up" : "change-down";
   return `
     <td class="change-cell ${className}">
@@ -1510,14 +1510,14 @@ function renderStockChangeCell(item) {
 
 function formatStockChangeText(item) {
   if (!hasLowStockChange(item)) return "";
-  const direction = item.availableStockDelta > 0 ? "利앷?" : "媛먯냼";
-  return `${formatNumber(item.previousAvailableStock)} ??${formatNumber(item.availableStock)} / ${formatNumber(Math.abs(item.availableStockDelta))}媛?${direction}`;
+  const direction = item.availableStockDelta > 0 ? "증가" : "감소";
+  return `${formatNumber(item.previousAvailableStock)} → ${formatNumber(item.availableStock)} / ${formatNumber(Math.abs(item.availableStockDelta))}개 ${direction}`;
 }
 
 function getSimpleStatusRank(item) {
   const status = normalizeSimpleStatus(item.simpleStatus);
-  if (status === "?뱀씤") return 1;
-  if (status === "蹂대쪟") return 2;
+  if (status === "승인") return 1;
+  if (status === "보류") return 2;
   return 3;
 }
 
@@ -1533,7 +1533,7 @@ function normalizeProductNameForGrouping(value) {
     .replace(/\[[^\]]*\]/g, " ")
     .replace(/\([^)]*\)/g, " ")
     .replace(/재소단|리더|심플|승인|보류/g, " ")
-    .replace(/\d{2,6}\s*(size|mm|cm|t|x|횞)?/gi, " ")
+    .replace(/\d{2,6}\s*(size|mm|cm|t|x)?/gi, " ")
     .replace(/[a-z]?\d{2,6}[a-z]?/gi, " ")
     .replace(/[_\-+/.,]/g, " ")
     .replace(/\s+/g, " ")
@@ -1631,7 +1631,7 @@ async function handleFileSelection(mode) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setImportMeta(mode, `오류: ${message}`);
-    addActivity("?뚯씪 ?ㅻ쪟", message);
+    addActivity("파일 오류", message);
     persist();
     render();
   } finally {
@@ -1646,7 +1646,7 @@ function setImportMeta(mode, text) {
 
 function rowsToTable(rows, options = {}) {
   const cleanRows = rows.map((row) => row.map(normalizeCell)).filter((row) => row.some((value) => String(value).trim() !== ""));
-  if (!cleanRows.length) throw new Error("?쎌쓣 ?곗씠?곌? ?놁뒿?덈떎.");
+  if (!cleanRows.length) throw new Error("읽을 데이터가 없습니다.");
 
   const headerIndex = findHeaderIndex(cleanRows);
   const headers = cleanRows[headerIndex].map((header) => String(header || "").trim());
@@ -1685,9 +1685,9 @@ function findHeaderIndex(rows) {
 
 function applyInventoryImport(table, fileName, importedCodes = null, importContext = null) {
   const map = getColumnMap(table.headers);
-  if (!map.code) throw new Error("?곹뭹肄붾뱶 而щ읆??李얠? 紐삵뻽?듬땲??");
+  if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
   if (!map.stock && !map.processingStock && !map.availableStock) {
-    throw new Error("?꾩옱怨?泥섎━以?媛?⑹옱怨?以??섎굹 ?댁긽???꾩슂?⑸땲??");
+    throw new Error("현재고, 처리중, 가용재고 중 하나 이상이 필요합니다.");
   }
 
   const now = new Date().toISOString();
@@ -1824,8 +1824,8 @@ function shouldAutoHideZeroStock(stock, processingStock) {
 
 function applyOrderImport(table, fileName) {
   const map = getColumnMap(table.headers);
-  if (!map.code) throw new Error("?곹뭹肄붾뱶 而щ읆??李얠? 紐삵뻽?듬땲??");
-  if (!map.orderQty) throw new Error("二쇰Ц?섎웾 而щ읆??李얠? 紐삵뻽?듬땲??");
+  if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
+  if (!map.orderQty) throw new Error("주문수량 컬럼을 찾지 못했습니다.");
 
   const orderMap = new Map();
   table.records.forEach((record) => {
@@ -1890,8 +1890,8 @@ function applyOrderImport(table, fileName) {
 
 function applyScheduleImport(table, fileName) {
   const map = getColumnMap(table.headers);
-  if (!map.code) throw new Error("?곹뭹踰덊샇 而щ읆??李얠? 紐삵뻽?듬땲??");
-  if (!map.inboundDate && !map.inboundQty) throw new Error("?낃퀬?쇱젙 ?먮뒗 ?낃퀬?섎웾 而щ읆???꾩슂?⑸땲??");
+  if (!map.code) throw new Error("상품번호 컬럼을 찾지 못했습니다.");
+  if (!map.inboundDate && !map.inboundQty) throw new Error("입고일정 또는 입고수량 컬럼이 필요합니다.");
 
   const now = new Date().toISOString();
   let updated = 0;
@@ -1939,7 +1939,7 @@ function applyScheduleImport(table, fileName) {
       item.inboundDate = inboundDate;
     }
     if (map.inboundQty) {
-      recordItemEdit(item, "?낃퀬?섎웾", item.inboundQty, inboundQty);
+      recordItemEdit(item, "입고수량", item.inboundQty, inboundQty);
       item.inboundQty = inboundQty;
     }
     item.updatedAt = now;
@@ -1984,7 +1984,7 @@ async function parseFile(file) {
     return parseDelimitedText(text, extension === "tsv" ? "\t" : detectDelimiter(text));
   }
   if (extension === "xlsx") return parseXlsx(file);
-  throw new Error("CSV, TSV, XLSX ?뚯씪留?吏?먰빀?덈떎.");
+  throw new Error("CSV, TSV, XLSX 파일만 지원합니다.");
 }
 
 function parseDelimitedText(text, delimiter) {
@@ -2055,7 +2055,7 @@ async function unzip(bytes) {
   const entries = {};
 
   for (let index = 0; index < totalEntries; index += 1) {
-    if (view.getUint32(pointer, true) !== 0x02014b50) throw new Error("XLSX 援ъ“瑜??쎌? 紐삵뻽?듬땲??");
+    if (view.getUint32(pointer, true) !== 0x02014b50) throw new Error("XLSX 구조를 읽지 못했습니다.");
     const method = view.getUint16(pointer + 10, true);
     const compressedSize = view.getUint32(pointer + 20, true);
     const fileNameLength = view.getUint16(pointer + 28, true);
@@ -2079,11 +2079,11 @@ function findEndOfCentralDirectory(view) {
   for (let offset = view.byteLength - 22; offset >= min; offset -= 1) {
     if (view.getUint32(offset, true) === 0x06054b50) return offset;
   }
-  throw new Error("XLSX ?앸?遺꾩쓣 李얠? 紐삵뻽?듬땲??");
+  throw new Error("XLSX 핵심 부분을 찾지 못했습니다.");
 }
 
 async function inflateRaw(bytes) {
-  if (!("DecompressionStream" in window)) throw new Error("??釉뚮씪?곗???XLSX ?뺤텞 ?댁젣瑜?吏?먰븯吏 ?딆뒿?덈떎.");
+  if (!("DecompressionStream" in window)) throw new Error("이 브라우저는 XLSX 압축 해제를 지원하지 않습니다.");
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
@@ -2156,7 +2156,7 @@ function columnNameToIndex(name) {
 function renderImportPanel() {
   els.columnChips.innerHTML = state.lastColumns.length
     ? state.lastColumns.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")
-    : `<span class="chip">?湲곗쨷</span>`;
+    : `<span class="chip">대기중</span>`;
 
   els.activityList.innerHTML = state.activity.length
     ? state.activity
@@ -2173,7 +2173,7 @@ function renderImportPanel() {
           `,
         )
         .join("")
-    : `<div class="empty-state"><strong>泥섎━ 湲곕줉???놁뒿?덈떎.</strong></div>`;
+    : `<div class="empty-state"><strong>처리 기록이 없습니다.</strong></div>`;
 }
 
 function addActivity(title, detail) {
@@ -2188,7 +2188,7 @@ function clearActivity() {
 }
 
 function clearAllData() {
-  if (!confirm("?꾩옱 ??λ맂 ?ш퀬 ?곗씠?곕? 紐⑤몢 吏?멸퉴??")) return;
+  if (!confirm("현재 저장된 재고 데이터를 모두 지울까요?")) return;
   state = createDefaultState();
   persist();
   render();
@@ -2288,7 +2288,7 @@ function exportCsv() {
           item.status.label,
           item.code,
           item.codeChange,
-          item.parentCode ? "硫붿씤肄붾뱶" : "",
+          item.parentCode ? "메인코드" : "",
           item.mainCode,
           item.simpleStatus,
           item.name,
@@ -2301,7 +2301,7 @@ function exportCsv() {
           item.inboundDate,
           item.inboundQty,
           item.orderQty,
-          item.inSimpleStock ? item.source || "?ы뵆 ?ш퀬紐⑸줉" : "二쇰Ц??湲곗〈?먮즺",
+          item.inSimpleStock ? item.source || "심플 재고목록" : "주문서 기준자료",
           formatSalesLinksForCsv(item.salesLinks),
           formatPriceSettingsForCsv(item.priceSettings),
           formatPeriodSalesForCsv(item),
@@ -2379,8 +2379,8 @@ function normalizeCode(value) {
 function normalizeSimpleStatus(value) {
   const text = String(value ?? "").trim();
   if (!text) return "";
-  if (text.includes("?뱀씤")) return "?뱀씤";
-  if (text.includes("蹂대쪟")) return "蹂대쪟";
+  if (text.includes("승인")) return "승인";
+  if (text.includes("보류")) return "보류";
   return "";
 }
 
@@ -2448,7 +2448,7 @@ function hasPriceSettingContent(entry) {
 function formatPriceSettingForHistory(entry) {
   if (!entry) return "";
   const priceText = entry.oldPrice || entry.newPrice ? `${entry.oldPrice || "-"} -> ${entry.newPrice || "-"}` : "";
-  const qtyText = entry.soldQty ? `${entry.soldQty}媛??먮ℓ` : "";
+  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
   return [priceText, entry.date, qtyText, entry.memo].filter(Boolean).join(" / ");
 }
 
@@ -2478,7 +2478,7 @@ function hasPeriodSaleContent(entry) {
 function formatPeriodSaleForHistory(entry) {
   if (!entry) return "";
   const periodText = entry.startDate || entry.endDate ? `${entry.startDate || "-"} ~ ${entry.endDate || "-"}` : "";
-  const qtyText = entry.soldQty ? `${entry.soldQty}媛??먮ℓ` : "";
+  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
   return [periodText, qtyText, entry.memo].filter(Boolean).join(" / ");
 }
 
@@ -2656,7 +2656,7 @@ function renameLegacyMainCodeText(value) {
 
 function formatHistoryForCsv(history) {
   return normalizeItemHistory(history)
-    .map((entry) => `${formatDate(entry.at)} / ${entry.author} / ${entry.field} / ${entry.before || "鍮덉뭏"} ??${entry.after || "鍮덉뭏"}`)
+    .map((entry) => `${formatDate(entry.at)} / ${entry.author} / ${entry.field} / ${entry.before || "빈칸"} → ${entry.after || "빈칸"}`)
     .join(" | ");
 }
 
