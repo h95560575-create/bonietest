@@ -1568,3 +1568,34 @@ tr.row-low5 td {
   height: 16px;
   cursor: pointer;
 }
+
+.sortable-head {
+  padding: 0;
+}
+
+.header-sort-button {
+  width: 100%;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.header-sort-button:hover,
+.header-sort-button.active {
+  color: #0b8fe8;
+  background: #eef8ff;
+}
+
+.sort-indicator {
+  min-width: 12px;
+  color: #0b8fe8;
+  font-size: 12px;
+}

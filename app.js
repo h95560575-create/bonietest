@@ -48,6 +48,17 @@ const VIEW_COLUMNS = {
   all: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
+const HEADER_SORT_MODES = {
+  sequence: ["numberAsc", "numberDesc"],
+  code: ["codeAsc", "codeDesc"],
+  name: ["nameAsc", "nameDesc"],
+  stock: ["stockAsc", "stockDesc"],
+  processingStock: ["processingAsc", "processingDesc"],
+  availableStock: ["availableAsc", "availableDesc"],
+  priceSettings: ["priceSoldAsc", "priceSoldDesc"],
+  periodSales: ["periodSoldAsc", "periodSoldDesc"],
+};
+
 const HEADER_ALIASES = {
   code: [
     "상품코드",
@@ -212,6 +223,7 @@ els.pageNumberList.addEventListener("click", (event) => {
   currentPage = Number(button.dataset.page || 1);
   render();
 });
+els.inventoryHead.addEventListener("click", handleHeaderSortClick);
 els.exportBtn.addEventListener("click", exportCsv);
 if (els.autoHiddenToggleBtn) els.autoHiddenToggleBtn.addEventListener("click", toggleAutoHiddenInAll);
 if (els.selectedDownloadBtn) els.selectedDownloadBtn.addEventListener("click", exportSelectedItems);
@@ -550,7 +562,30 @@ function getVisibleColumns() {
 
 function renderHeaderCell(column) {
   if (column.key === "select") return `<th class="select-head"><input type="checkbox" data-select-visible ${areVisibleRowsSelected() ? "checked" : ""} aria-label="현재 페이지 전체 선택" /></th>`;
-  return `<th class="${getColumnHeaderClass(column.key)}">${escapeHtml(column.label)}</th>`;
+  const sortModes = HEADER_SORT_MODES[column.key];
+  if (!sortModes) return `<th class="${getColumnHeaderClass(column.key)}">${escapeHtml(column.label)}</th>`;
+  const currentMode = els.sortSelect ? els.sortSelect.value : "default";
+  const activeIndex = sortModes.indexOf(currentMode);
+  const indicator = activeIndex === 0 ? "↑" : activeIndex === 1 ? "↓" : "↕";
+  return `
+    <th class="${getColumnHeaderClass(column.key)} sortable-head">
+      <button class="header-sort-button ${activeIndex >= 0 ? "active" : ""}" data-header-sort="${column.key}" type="button">
+        <span>${escapeHtml(column.label)}</span>
+        <span class="sort-indicator">${indicator}</span>
+      </button>
+    </th>
+  `;
+}
+
+function handleHeaderSortClick(event) {
+  const button = event.target.closest("[data-header-sort]");
+  if (!button || !els.sortSelect) return;
+  const modes = HEADER_SORT_MODES[button.dataset.headerSort];
+  if (!modes) return;
+  const current = els.sortSelect.value;
+  els.sortSelect.value = current === modes[0] ? modes[1] : modes[0];
+  currentPage = 1;
+  render();
 }
 
 function getColumnHeaderClass(key) {
@@ -787,7 +822,7 @@ function renderPriceSettingRow(item, entry) {
 }
 
 function renderPeriodSalesCell(item) {
-  const range = getPeriodQueryRange();
+  const range = getPeriodQueryRange(item);
   const stats = getPeriodSalesStats(item, range);
   if (!range.start || !range.end) {
     return `
@@ -1356,9 +1391,17 @@ function sortBySelectedMode(a, b, sortMode) {
     processingDesc: () => b.processingStock - a.processingStock,
     availableAsc: () => a.availableStock - b.availableStock,
     availableDesc: () => b.availableStock - a.availableStock,
+    priceSoldAsc: () => getPriceSoldQty(a) - getPriceSoldQty(b),
+    priceSoldDesc: () => getPriceSoldQty(b) - getPriceSoldQty(a),
+    periodSoldAsc: () => getPeriodSalesStats(a, getPeriodQueryRange(a)).soldQty - getPeriodSalesStats(b, getPeriodQueryRange(b)).soldQty,
+    periodSoldDesc: () => getPeriodSalesStats(b, getPeriodQueryRange(b)).soldQty - getPeriodSalesStats(a, getPeriodQueryRange(a)).soldQty,
   };
   const sorter = sorters[sortMode];
   return sorter ? sorter() : 0;
+}
+
+function getPriceSoldQty(item) {
+  return normalizePriceSettings(item.priceSettings).reduce((total, entry) => total + toInteger(entry.soldQty, 0), 0);
 }
 
 function getMainGroupCode(item) {
@@ -2496,7 +2539,7 @@ function formatPriceSettingsForCsv(rows) {
 
 function formatPeriodSalesForCsv(itemOrRows) {
   if (Array.isArray(itemOrRows)) return normalizePeriodSales(itemOrRows).map(formatPeriodSaleForHistory).join(" | ");
-  const range = getPeriodQueryRange();
+  const range = getPeriodQueryRange(itemOrRows);
   const stats = getPeriodSalesStats(itemOrRows, range);
   if (!range.start || !range.end) return "";
   return `${formatPeriodRangeLabel(range)} / 판매 ${formatNumber(stats.soldQty)}개 / 증가 ${formatNumber(stats.increasedQty)}개 / 차이 ${formatSignedNumber(stats.netChange)}개 / 기록 ${formatNumber(stats.logCount)}건`;
@@ -2535,11 +2578,36 @@ function createStockLog({ at, source, previousStock, stock, previousProcessingSt
   };
 }
 
-function getPeriodQueryRange() {
+function getPeriodQueryRange(item = null) {
+  const start = parsePeriodDate(els.periodStartInput?.value, false) || getDefaultPeriodStartDate(item);
+  const end = parsePeriodDate(els.periodEndInput?.value, true) || getTodayEndDate();
   return {
-    start: parsePeriodDate(els.periodStartInput?.value, false),
-    end: parsePeriodDate(els.periodEndInput?.value, true),
+    start,
+    end,
+    isDefaultStart: !parsePeriodDate(els.periodStartInput?.value, false),
+    isDefaultEnd: !parsePeriodDate(els.periodEndInput?.value, true),
   };
+}
+
+function getDefaultPeriodStartDate(item) {
+  if (!item) return null;
+  const candidates = [
+    item.createdAt,
+    item.stockChangedAt,
+    item.updatedAt,
+    ...normalizeStockLogs(item.stockLogs).map((entry) => entry.at),
+  ]
+    .map((value) => parseDateValue(value))
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+  if (!candidates.length) return null;
+  const date = candidates[0];
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
+function getTodayEndDate() {
+  const date = new Date();
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 }
 
 function parsePeriodDate(value, endOfDay) {
