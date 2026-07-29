@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f7f8fa;
   --surface: #ffffff;
   --surface-soft: #f9fafb;
@@ -1539,4 +1539,32 @@ tr.row-low5 td {
 .period-sales-summary {
   display: grid;
   gap: 2px;
+}
+
+.selection-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.auto-hidden-toggle.active {
+  color: #0b8fe8;
+  border-color: #9ed8ff;
+  background: #eef8ff;
+}
+
+.select-head,
+.select-cell {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+}
+
+.select-head input,
+.select-cell input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }

@@ -1,10 +1,11 @@
-const STORAGE_KEY = "jaesodanInventory.v2";
+﻿const STORAGE_KEY = "jaesodanInventory.v2";
 const AUTHOR_KEY = "jaesodanInventory.author";
 const LOGIN_KEY = "jaesodanInventory.loginUser";
 const API_STATE_URL = "/api/state";
 const PAGE_SIZE = 50;
 
 const COLUMNS = [
+  { key: "select", label: "선택" },
   { key: "sequence", label: "번호" },
   { key: "status", label: "상태" },
   { key: "code", label: "상품코드" },
@@ -35,16 +36,16 @@ const COLUMNS = [
 ];
 
 const VIEW_COLUMNS = {
-  core: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
+  core: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   stock: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   catalog: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "history"],
   depletion: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt"],
   priceDate: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
   period: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
   price: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
-  changes: ["sequence", "status", "code", "codeChange", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
+  changes: ["select", "sequence", "status", "code", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
   watch: ["sequence", "status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
-  all: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
+  all: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
 
 const HEADER_ALIASES = {
@@ -55,15 +56,15 @@ const HEADER_ALIASES = {
     "상품 번호",
     "품목코드",
     "옵션코드",
-    "판매자상품코드",
-    "판매자 관리코드",
+    "판매대상코드",
+    "판매 관리코드",
     "관리코드",
     "sku",
     "code",
     "productcode",
     "itemcode",
   ],
-  name: ["상품명", "상품 명", "상품명(심플명)", "심플명", "품목명", "옵션명", "productname", "itemname", "name"],
+  name: ["상품명", "상품 명", "상품명/심플명", "심플명", "품목명", "옵션명", "productname", "itemname", "name"],
   stock: ["현재고", "현재 재고", "재고", "재고수량", "재고 수량", "stock", "stockqty", "inventory"],
   processingStock: ["처리중", "처리 중", "미발송", "미발송수량", "출고대기", "processing", "inprogress"],
   availableStock: ["가용재고", "가용 재고", "판매가능수량", "판매 가능 수량", "available", "availablestock"],
@@ -89,6 +90,8 @@ let saveInFlight = false;
 let queuedServerSave = false;
 let lastLocalChangeAt = 0;
 let currentUser = null;
+let showAutoHiddenInAll = false;
+const selectedItemCodes = new Set();
 
 const els = {
   authorInput: document.getElementById("authorInput"),
@@ -109,6 +112,8 @@ const els = {
   tableWrap: document.querySelector(".table-wrap"),
   searchInput: document.getElementById("searchInput"),
   sortSelect: document.getElementById("sortSelect"),
+  autoHiddenToggleBtn: document.getElementById("autoHiddenToggleBtn"),
+  selectedDownloadBtn: document.getElementById("selectedDownloadBtn"),
   panelToolbar: document.querySelector(".panel-toolbar"),
   priceModeBar: document.getElementById("priceModeBar"),
   periodQueryBar: document.getElementById("periodQueryBar"),
@@ -208,6 +213,8 @@ els.pageNumberList.addEventListener("click", (event) => {
   render();
 });
 els.exportBtn.addEventListener("click", exportCsv);
+if (els.autoHiddenToggleBtn) els.autoHiddenToggleBtn.addEventListener("click", toggleAutoHiddenInAll);
+if (els.selectedDownloadBtn) els.selectedDownloadBtn.addEventListener("click", exportSelectedItems);
 els.adminBtn.addEventListener("click", openAdminModal);
 els.loginBtn.addEventListener("click", handleLoginButton);
 if (els.clearDataBtn) els.clearDataBtn.addEventListener("click", clearAllData);
@@ -225,6 +232,7 @@ els.inventoryFileInput.addEventListener("change", () => handleFileSelection("inv
 els.orderFileInput.addEventListener("change", () => handleFileSelection("orders"));
 els.scheduleFileInput.addEventListener("change", () => handleFileSelection("schedule"));
 els.clearLogBtn.addEventListener("click", clearActivity);
+els.inventoryBody.addEventListener("change", handleSelectionChange);
 els.inventoryBody.addEventListener("change", handleTableEdit);
 els.inventoryBody.addEventListener("click", handleTableClick);
 els.historyCloseBtn.addEventListener("click", closeHistoryModal);
@@ -325,8 +333,8 @@ function persist() {
   lastLocalChangeAt = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   els.saveStatus.textContent = serverSyncEnabled
-    ? `공유 저장 예약됨 ${formatTime(new Date().toISOString())}`
-    : `로컬 저장됨 ${formatTime(new Date().toISOString())}`;
+    ? `怨듭쑀 ????덉빟??${formatTime(new Date().toISOString())}`
+    : `濡쒖뺄 ??λ맖 ${formatTime(new Date().toISOString())}`;
   queueServerSave();
 }
 
@@ -344,11 +352,11 @@ async function bootSharedState() {
 
     if (!sharedState.items?.length && localState.items.length) {
       await saveSnapshotToServer(localState);
-      els.saveStatus.textContent = `로컬 데이터를 공유 저장소로 이전함 ${formatTime(new Date().toISOString())}`;
+      els.saveStatus.textContent = `濡쒖뺄 ?곗씠?곕? 怨듭쑀 ??μ냼濡??댁쟾??${formatTime(new Date().toISOString())}`;
     } else {
       replaceState(sharedState);
       render();
-      els.saveStatus.textContent = `공유 저장소 연결됨 ${formatTime(new Date().toISOString())}`;
+      els.saveStatus.textContent = `怨듭쑀 ??μ냼 ?곌껐??${formatTime(new Date().toISOString())}`;
     }
 
     setInterval(refreshSharedState, 15000);
@@ -369,7 +377,7 @@ function isServerBacked() {
 
 async function fetchSharedState() {
   const response = await fetch(API_STATE_URL, { headers: { Accept: "application/json" }, credentials: "same-origin" });
-  if (!response.ok) throw new Error(`공유 데이터 조회 실패 (${response.status})`);
+  if (!response.ok) throw new Error(`怨듭쑀 ?곗씠??議고쉶 ?ㅽ뙣 (${response.status})`);
   return response.json();
 }
 
@@ -391,9 +399,9 @@ async function saveStateToServer() {
   try {
     await saveSnapshotToServer(normalizeState(state));
     serverSyncEnabled = true;
-    els.saveStatus.textContent = `공유 저장됨 ${formatTime(new Date().toISOString())}`;
+    els.saveStatus.textContent = `怨듭쑀 ??λ맖 ${formatTime(new Date().toISOString())}`;
   } catch (error) {
-    els.saveStatus.textContent = "공유 저장 실패, 로컬에는 저장됨";
+    els.saveStatus.textContent = "공유 서버 연결 실패, 로컬 저장 중";
     console.warn(error);
   } finally {
     saveInFlight = false;
@@ -408,7 +416,7 @@ async function saveSnapshotToServer(snapshot) {
     credentials: "same-origin",
     body: JSON.stringify(snapshot),
   });
-  if (!response.ok) throw new Error(`공유 저장 실패 (${response.status})`);
+  if (!response.ok) throw new Error(`怨듭쑀 ????ㅽ뙣 (${response.status})`);
   return response.json();
 }
 
@@ -419,7 +427,7 @@ async function refreshSharedState() {
     if (JSON.stringify(normalizeState(state)) !== JSON.stringify(sharedState)) {
       replaceState(sharedState);
       render();
-      els.saveStatus.textContent = `공유 데이터 갱신됨 ${formatTime(new Date().toISOString())}`;
+      els.saveStatus.textContent = `怨듭쑀 ?곗씠??媛깆떊??${formatTime(new Date().toISOString())}`;
     }
   } catch (error) {
     console.warn(error);
@@ -462,10 +470,21 @@ function render() {
     });
   }
 
+  if (els.autoHiddenToggleBtn) {
+    els.autoHiddenToggleBtn.hidden = !(activeTab === "all" && activeView === "all");
+    els.autoHiddenToggleBtn.classList.toggle("active", showAutoHiddenInAll);
+    els.autoHiddenToggleBtn.textContent = showAutoHiddenInAll ? "일반 목록 보기" : "자동숨김 보기";
+  }
+  if (els.selectedDownloadBtn) {
+    els.selectedDownloadBtn.hidden = !((activeTab === "all" && activeView === "all") || activeTab === "allStockChanges");
+    els.selectedDownloadBtn.textContent = selectedItemCodes.size ? `선택 목록 다운로드 (${selectedItemCodes.size})` : "선택 목록 다운로드";
+  }
+
   els.inventoryPanel.hidden = false;
   els.importPanel.hidden = activeTab !== "import";
   if (els.tableWrap) els.tableWrap.hidden = activeTab === "import";
   if (activeTab === "import") {
+    showAutoHiddenInAll = false;
     els.emptyState.hidden = true;
     els.paginationBar.hidden = true;
   }
@@ -477,23 +496,14 @@ function render() {
 
 function renderTable() {
   if (activeTab === "import") return;
-  const query = normalizeSearch(els.searchInput.value);
-  const rows = state.items
-    .filter(isVisibleInventoryItem)
-    .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }))
-    .filter((item) => {
-      if (!matchesActiveTab(item)) return false;
-      if (!query) return true;
-      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note} ${formatSalesLinksSearch(item.salesLinks)} ${formatPriceTrackingSearch(item)}`).includes(query);
-    })
-    .sort(sortItems);
+  const rows = getCurrentVisibleRows();
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   currentPage = Math.min(Math.max(1, currentPage), totalPages);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
   const pageRows = rows.slice(pageStart, currentPage * PAGE_SIZE);
 
   els.emptyState.hidden = rows.length > 0;
-  els.inventoryHead.innerHTML = getVisibleColumns().map((column) => `<th class="${getColumnHeaderClass(column.key)}">${escapeHtml(column.label)}</th>`).join("");
+  els.inventoryHead.innerHTML = getVisibleColumns().map((column) => renderHeaderCell(column)).join("");
   els.inventoryBody.innerHTML = pageRows.map((item, index) => renderRow(item, pageStart + index + 1)).join("");
   renderPagination(rows.length, totalPages);
 }
@@ -507,7 +517,7 @@ function renderPagination(totalRows, totalPages) {
   els.pageNumberList.innerHTML = getPageNumbers(currentPage, totalPages)
     .map((page) =>
       page === "gap"
-        ? `<span class="page-gap">…</span>`
+        ? `<span class="page-gap">...</span>`
         : `<button class="page-number ${page === currentPage ? "active" : ""}" data-page="${page}" type="button">${formatNumber(page)}</button>`,
     )
     .join("");
@@ -533,11 +543,18 @@ function renderRow(item, rowNumber = 0) {
 
 function getVisibleColumns() {
   const viewKey = activeTab === "watch" ? "watch" : activeView === "price" ? priceMode : activeView;
-  const keys = VIEW_COLUMNS[viewKey] || VIEW_COLUMNS.all;
+  let keys = VIEW_COLUMNS[viewKey] || VIEW_COLUMNS.all;
+  if (!((activeTab === "all" && activeView === "all") || activeTab === "allStockChanges")) keys = keys.filter((key) => key !== "select");
   return keys.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean);
 }
 
+function renderHeaderCell(column) {
+  if (column.key === "select") return `<th class="select-head"><input type="checkbox" data-select-visible ${areVisibleRowsSelected() ? "checked" : ""} aria-label="현재 페이지 전체 선택" /></th>`;
+  return `<th class="${getColumnHeaderClass(column.key)}">${escapeHtml(column.label)}</th>`;
+}
+
 function getColumnHeaderClass(key) {
+  if (key === "select") return "select-head";
   if (key === "sequence") return "sequence-head";
   if (key === "inboundQty") return "center-head";
   if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
@@ -548,7 +565,13 @@ function getColumnHeaderClass(key) {
   return "";
 }
 
+function renderSelectCell(item) {
+  const checked = selectedItemCodes.has(item.code) ? "checked" : "";
+  return `<td class="select-cell"><input type="checkbox" data-row-select data-code="${escapeHtml(item.code)}" ${checked} aria-label="상품 선택" /></td>`;
+}
+
 function renderCell(item, column, rowNumber = 0) {
+  if (column.key === "select") return renderSelectCell(item);
   if (column.key === "sequence") return `<td class="sequence-cell">${formatNumber(rowNumber)}</td>`;
   if (column.key === "status") {
     return `<td><span class="status ${item.status.className}">${escapeHtml(item.status.label)}</span></td>`;
@@ -572,7 +595,7 @@ function renderCell(item, column, rowNumber = 0) {
     return `<td class="number-cell${extraClass}">${formatNumber(value)}</td>`;
   }
   if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
-  if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서/기존자료"}</td>`;
+  if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "?ы뵆 ?ш퀬紐⑸줉") : "二쇰Ц??湲곗〈?먮즺"}</td>`;
   if (column.key === "salesLinks") return renderSalesLinksCell(item);
   if (column.key === "priceSettings") return renderPriceSettingsCell(item);
   if (column.key === "periodSales") return renderPeriodSalesCell(item);
@@ -594,8 +617,8 @@ function renderNameCell(item) {
   return `
     <td class="name-cell ${hasDot ? "has-new-alert" : ""} ${isSubCode ? "is-sub-code" : ""}">
       <div class="name-line">
-        ${hasDot ? `<span class="new-alert-dot" title="새로 생긴 주의 품목" aria-label="새로 생긴 주의 품목"></span>` : ""}
-        ${isSubCode ? `<span class="sub-code-mark">ㄴ</span>` : ""}
+        ${hasDot ? `<span class="new-alert-dot" title="?덈줈 ?앷릿 二쇱쓽 ?덈ぉ" aria-label="?덈줈 ?앷릿 二쇱쓽 ?덈ぉ"></span>` : ""}
+        ${isSubCode ? `<span class="sub-code-mark">??/span>` : ""}
         <strong>${escapeHtml(item.name || "-")}</strong>
       </div>
     </td>
@@ -613,7 +636,7 @@ function handleTableEdit(event) {
   if (!item) return;
   if (event.target.matches("[data-note-input]")) {
     const nextValue = event.target.value.trim();
-    recordItemEdit(item, "메모", item.note, nextValue);
+    recordItemEdit(item, "硫붾え", item.note, nextValue);
     item.note = nextValue;
   } else if (event.target.matches("[data-sales-link-input]")) {
     updateSalesLinkField(item, event.target.dataset.linkId, event.target.dataset.field, event.target.value);
@@ -625,7 +648,7 @@ function handleTableEdit(event) {
     const nextValue = event.target.matches("[data-main-code-input]") ? normalizeCode(event.target.value) : event.target.value.trim();
     if (event.target.matches("[data-main-code-input]")) {
       const safeValue = nextValue === item.code ? "" : nextValue;
-      recordItemEdit(item, "소속 메인코드", item.mainCode, safeValue);
+      recordItemEdit(item, "?뚯냽 硫붿씤肄붾뱶", item.mainCode, safeValue);
       item.mainCode = safeValue;
     } else {
       recordItemEdit(item, "변경코드", item.codeChange, nextValue);
@@ -662,7 +685,7 @@ function updatePeriodSaleField(item, rowId, field, value) {
   const before = formatPeriodSaleForHistory(row);
   row[field] = field === "soldQty" ? cleanNumberText(value) : String(value || "").trim();
   item.periodSales = rows.filter(hasPeriodSaleContent);
-  recordItemEdit(item, "기간판매", before, formatPeriodSaleForHistory(row));
+  recordItemEdit(item, "湲곌컙?먮ℓ", before, formatPeriodSaleForHistory(row));
 }
 
 function updateSalesLinkField(item, linkId, field, value) {
@@ -676,13 +699,13 @@ function updateSalesLinkField(item, linkId, field, value) {
   const before = formatSalesLinkForHistory(link);
   link[field] = field === "qty" ? String(value || "").replace(/[^\d.-]/g, "").trim() : String(value || "").trim();
   item.salesLinks = links.filter(hasSalesLinkContent);
-  recordItemEdit(item, "판매링크", before, formatSalesLinkForHistory(link));
+  recordItemEdit(item, "?먮ℓ留곹겕", before, formatSalesLinkForHistory(link));
 }
 
 function renderCodeChangeCell(item) {
   return `
     <td class="code-change-cell">
-      <input data-code-change-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.codeChange || "")}" placeholder="예: 7004" />
+      <input data-code-change-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.codeChange || "")}" placeholder="?? 7004" />
     </td>
   `;
 }
@@ -690,7 +713,7 @@ function renderCodeChangeCell(item) {
 function renderMainCodeCell(item) {
   return `
     <td class="main-code-cell">
-      <input data-main-code-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.mainCode || "")}" placeholder="예: 9452" />
+      <input data-main-code-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.mainCode || "")}" placeholder="?? 9452" />
     </td>
   `;
 }
@@ -701,16 +724,16 @@ function renderSalesLinksCell(item) {
   return `
     <td class="sales-links-cell">
       <div class="sales-link-head" aria-hidden="true">
-        <span>플랫폼</span>
-        <span>판매상품명</span>
-        <span>수량</span>
-        <span>상품페이지링크</span>
+        <span>?뚮옯??/span>
+        <span>?먮ℓ?곹뭹紐?/span>
+        <span>?섎웾</span>
+        <span>?곹뭹?섏씠吏留곹겕</span>
         <span></span>
       </div>
       <div class="sales-link-list">
         ${rows.map((link) => renderSalesLinkRow(item, link)).join("")}
       </div>
-      <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">판매링크 추가</button>
+      <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">?먮ℓ留곹겕 異붽?</button>
     </td>
   `;
 }
@@ -719,11 +742,11 @@ function renderSalesLinkRow(item, link) {
   const isSaved = Boolean(link.id && normalizeSalesLinks(item.salesLinks, true).some((entry) => entry.id === link.id));
   return `
     <div class="sales-link-row">
-      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="platform" value="${escapeHtml(link.platform)}" placeholder="오늘의집" />
-      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="productName" value="${escapeHtml(link.productName)}" placeholder="판매상품명" />
-      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="qty" value="${escapeHtml(link.qty)}" placeholder="수량" inputmode="numeric" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="platform" value="${escapeHtml(link.platform)}" placeholder="?ㅻ뒛?섏쭛" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="productName" value="${escapeHtml(link.productName)}" placeholder="" />
+      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="qty" value="${escapeHtml(link.qty)}" placeholder="?섎웾" inputmode="numeric" />
       <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="url" value="${escapeHtml(link.url)}" placeholder="https://..." />
-      <button class="sales-link-delete" data-sales-link-delete data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
+      <button class="sales-link-delete" data-sales-link-delete data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" type="button" ${isSaved ? "" : "disabled"}>??젣</button>
     </div>
   `;
 }
@@ -734,17 +757,17 @@ function renderPriceSettingsCell(item) {
   return `
     <td class="price-tracking-cell">
       <div class="price-tracking-head price-date-head" aria-hidden="true">
-        <span>기존가격</span>
-        <span>조정가격</span>
-        <span>가격설정일</span>
-        <span>판매량</span>
-        <span>메모</span>
+        <span>湲곗〈媛寃?/span>
+        <span>議곗젙媛寃?/span>
+        <span>媛寃⑹꽕?뺤씪</span>
+        <span>?먮ℓ??/span>
+        <span>硫붾え</span>
         <span></span>
       </div>
       <div class="price-tracking-list">
         ${displayRows.map((entry) => renderPriceSettingRow(item, entry)).join("")}
       </div>
-      <button class="price-tracking-add" data-price-add data-code="${escapeHtml(item.code)}" type="button">가격기록 추가</button>
+      <button class="price-tracking-add" data-price-add data-code="${escapeHtml(item.code)}" type="button">媛寃⑷린濡?異붽?</button>
     </td>
   `;
 }
@@ -758,7 +781,7 @@ function renderPriceSettingRow(item, entry) {
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="date" value="${escapeHtml(entry.date)}" placeholder="" />
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="" inputmode="numeric" />
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="" />
-      <button class="price-tracking-delete" data-price-delete data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
+      <button class="price-tracking-delete" data-price-delete data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>??젣</button>
     </div>
   `;
 }
@@ -775,10 +798,10 @@ function renderPeriodSalesCell(item) {
   return `
     <td class="period-sales-cell">
       <div class="period-sales-summary">
-        <strong>${formatNumber(stats.soldQty)}개 판매</strong>
+        <strong>${formatNumber(stats.soldQty)}媛??먮ℓ</strong>
         <span>${escapeHtml(formatPeriodRangeLabel(range))}</span>
-        <span>증가 ${formatNumber(stats.increasedQty)}개 / 순변동 ${formatSignedNumber(stats.netChange)}개</span>
-        <span>기록 ${formatNumber(stats.logCount)}건 기준</span>
+        <span>利앷? ${formatNumber(stats.increasedQty)}媛?/ ?쒕???${formatSignedNumber(stats.netChange)}媛?/span>
+        <span>湲곕줉 ${formatNumber(stats.logCount)}嫄?湲곗?</span>
       </div>
     </td>
   `;
@@ -790,9 +813,9 @@ function renderPeriodSaleRow(item, entry) {
     <div class="price-tracking-row period-sale-row">
       <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="startDate" value="${escapeHtml(entry.startDate)}" placeholder="26.07.09" />
       <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="endDate" value="${escapeHtml(entry.endDate)}" placeholder="26.07.15" />
-      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="판매량" inputmode="numeric" />
-      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="메모" />
-      <button class="price-tracking-delete" data-period-delete data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="" inputmode="numeric" />
+      <input data-period-input data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="硫붾え" />
+      <button class="price-tracking-delete" data-period-delete data-code="${escapeHtml(item.code)}" data-period-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>??젣</button>
     </div>
   `;
 }
@@ -840,7 +863,7 @@ function handleTableClick(event) {
     if (!item) return;
     item.periodSales = [...normalizePeriodSales(item.periodSales, true), createEmptyPeriodSale()];
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "기간판매", "", "기간기록 추가");
+    recordItemEdit(item, "가격설정", "", "가격기록 추가");
     persist();
     render();
     return;
@@ -855,7 +878,7 @@ function handleTableClick(event) {
     const removed = rows.find((entry) => entry.id === deletePeriodButton.dataset.periodId);
     item.periodSales = rows.filter((entry) => entry.id !== deletePeriodButton.dataset.periodId);
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "기간판매", formatPeriodSaleForHistory(removed), "삭제");
+    recordItemEdit(item, "湲곌컙?먮ℓ", formatPeriodSaleForHistory(removed), "??젣");
     persist();
     render();
     return;
@@ -868,7 +891,7 @@ function handleTableClick(event) {
     if (!item) return;
     item.salesLinks = [...normalizeSalesLinks(item.salesLinks, true), createEmptySalesLink()];
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "판매링크", "", "판매링크 추가");
+    recordItemEdit(item, "가격설정", "", "가격기록 추가");
     persist();
     render();
     return;
@@ -883,7 +906,7 @@ function handleTableClick(event) {
     const removed = links.find((entry) => entry.id === deleteSalesLinkButton.dataset.linkId);
     item.salesLinks = links.filter((entry) => entry.id !== deleteSalesLinkButton.dataset.linkId);
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "판매링크", formatSalesLinkForHistory(removed), "삭제");
+    recordItemEdit(item, "?먮ℓ留곹겕", formatSalesLinkForHistory(removed), "??젣");
     persist();
     render();
     return;
@@ -906,7 +929,7 @@ function handleTableClick(event) {
 function renderHistoryCell(item) {
   return `
     <td class="history-cell">
-      <button class="history-button" data-history-open data-code="${escapeHtml(item.code)}" type="button">기록보기</button>
+      <button class="history-button" data-history-open data-code="${escapeHtml(item.code)}" type="button">湲곕줉蹂닿린</button>
     </td>
   `;
 }
@@ -943,7 +966,7 @@ function renderStockChangeDetailCell(item, key) {
   const pair = getStockChangePair(item, stockKey);
   if (!pair) return `<td class="change-cell muted">${formatNumber(getCurrentStockValue(item, stockKey))}</td>`;
   const className = pair.current > pair.previous ? "change-up" : "change-down";
-  return `<td class="change-cell ${className}"><strong>${formatNumber(pair.previous)} → ${formatNumber(pair.current)}</strong></td>`;
+  return `<td class="change-cell ${className}"><strong>${formatNumber(pair.previous)} ??${formatNumber(pair.current)}</strong></td>`;
 }
 
 function getCurrentStockValue(item, key) {
@@ -997,7 +1020,7 @@ function getDepletionEstimate(item) {
   const daysLeft = Math.max(1, Math.ceil(availableStock / dailyDecrease));
   const expectedDate = new Date(changedAt.getTime() + daysLeft * 86400000);
   const className = daysLeft <= 3 ? "depletion-danger" : daysLeft <= 7 ? "depletion-warning" : daysLeft <= 14 ? "depletion-caution" : "depletion-ok";
-  return createDepletionResult(`${formatNumber(daysLeft)}일 후`, `0개 예상`, `${formatNumber(dailyDecrease.toFixed(1))}개/일 감소`, formatShortDate(expectedDate), className);
+  return createDepletionResult(`${formatNumber(daysLeft)}일 후`, "0개 예상", `${formatNumber(dailyDecrease.toFixed(1))}개/일 감소`, formatShortDate(expectedDate), className);
 }
 
 function createDepletionResult(label, detail, rateText, dateText, className) {
@@ -1033,7 +1056,7 @@ function recordItemEdit(item, field, beforeValue, afterValue) {
     after: afterText,
   });
   item.history = item.history.slice(0, 100);
-  addActivity("상품 수정", `${author} / ${item.code} / ${field}`);
+  addActivity("?곹뭹 ?섏젙", `${author} / ${item.code} / ${field}`);
 }
 
 function openHistoryModal(item) {
@@ -1047,13 +1070,13 @@ function openHistoryModal(item) {
               <time>${escapeHtml(formatDate(entry.at))}</time>
               <div>
                 <strong>${escapeHtml(entry.author)} / ${escapeHtml(entry.field)}</strong>
-                <p>${escapeHtml(entry.before || "빈칸")} → ${escapeHtml(entry.after || "빈칸")}</p>
+                <p>${escapeHtml(entry.before || "鍮덉뭏")} ??${escapeHtml(entry.after || "鍮덉뭏")}</p>
               </div>
             </article>
           `,
         )
         .join("")
-    : `<div class="empty-state"><strong>아직 수정 기록이 없습니다.</strong></div>`;
+    : `<div class="empty-state"><strong>?꾩쭅 ?섏젙 湲곕줉???놁뒿?덈떎.</strong></div>`;
   els.historyModal.hidden = false;
 }
 
@@ -1094,7 +1117,7 @@ function setLoginUser(user) {
 
 function requireLogin(permissionKey = "") {
   if (currentUser && (!permissionKey || hasPermission(permissionKey))) return true;
-  openLoginModal(currentUser ? "이 작업을 할 권한이 없습니다." : "수정하거나 파일을 등록하려면 먼저 로그인해주세요.");
+  openLoginModal(currentUser ? "???묒뾽????沅뚰븳???놁뒿?덈떎." : "?섏젙?섍굅???뚯씪???깅줉?섎젮硫?癒쇱? 濡쒓렇?명빐二쇱꽭??");
   return false;
 }
 
@@ -1104,21 +1127,21 @@ function isLoggedIn() {
 
 function updateLoginLockedControls() {
   const locked = !isLoggedIn();
-  setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
-  setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
-  setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
+  setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "?ш퀬紐⑸줉 ?깅줉 沅뚰븳???꾩슂?⑸땲??");
+  setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "二쇰Ц???깅줉 沅뚰븳???꾩슂?⑸땲??");
+  setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "?낃퀬?쇱젙 ?섏젙 沅뚰븳???꾩슂?⑸땲??");
   document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete], [data-price-input], [data-price-add], [data-price-delete], [data-period-input], [data-period-add], [data-period-delete]").forEach((control) => {
-    setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드/메인코드/판매링크 수정 권한이 필요합니다.");
+    setControlLock(control, locked || !hasPermission("manageLinks"), "蹂寃쎌퐫??硫붿씤肄붾뱶/?먮ℓ留곹겕 ?섏젙 沅뚰븳???꾩슂?⑸땲??");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
-    setControlLock(control, locked || !hasPermission("editMemo"), "메모 수정 권한이 필요합니다.");
+    setControlLock(control, locked || !hasPermission("editMemo"), "硫붾え ?섏젙 沅뚰븳???꾩슂?⑸땲??");
   });
 }
 
 function setControlLock(control, locked, message) {
   if (!control) return;
   control.disabled = locked;
-  control.title = locked ? (isLoggedIn() ? message : "로그인 후 사용할 수 있습니다.") : "";
+  control.title = locked ? (isLoggedIn() ? message : "濡쒓렇?????ъ슜?????덉뒿?덈떎.") : "";
 }
 
 async function handleLoginButton() {
@@ -1149,7 +1172,7 @@ async function handleLoginSubmit(event) {
   event.preventDefault();
   const loginId = els.loginName.value.trim();
   const password = els.loginPassword.value;
-  els.loginMessage.textContent = "로그인 확인 중...";
+  els.loginMessage.textContent = "濡쒓렇???뺤씤 以?..";
   try {
     const response = await fetch("/api/auth/login", {
       method: "POST",
@@ -1159,7 +1182,7 @@ async function handleLoginSubmit(event) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      els.loginMessage.textContent = data.error || "아이디 또는 비밀번호가 맞지 않습니다.";
+      els.loginMessage.textContent = data.error || "?꾩씠???먮뒗 鍮꾨?踰덊샇媛 留욎? ?딆뒿?덈떎.";
       return;
     }
     setLoginUser(data.user);
@@ -1167,23 +1190,23 @@ async function handleLoginSubmit(event) {
     await bootSharedState();
     render();
   } catch {
-    els.loginMessage.textContent = "로그인 서버에 연결하지 못했습니다.";
+    els.loginMessage.textContent = "濡쒓렇???쒕쾭???곌껐?섏? 紐삵뻽?듬땲??";
   }
 }
 
 async function openAdminModal() {
   if (!requireLogin("manageUsers")) return;
   els.adminModal.hidden = false;
-  els.adminMessage.textContent = "사용자 목록을 불러오는 중...";
+  els.adminMessage.textContent = "?ъ슜??紐⑸줉??遺덈윭?ㅻ뒗 以?..";
   try {
     const response = await fetch("/api/admin/users", { headers: { Accept: "application/json" }, credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "사용자 목록을 불러오지 못했습니다.");
+    if (!response.ok) throw new Error(data.error || "?ъ슜??紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??");
     els.adminUserList.innerHTML = data.users.map(renderAdminUserRow).join("");
     els.adminMessage.textContent = "";
   } catch (error) {
     els.adminUserList.innerHTML = "";
-    els.adminMessage.textContent = error.message || "관리자모드를 열지 못했습니다.";
+    els.adminMessage.textContent = error.message || "愿由ъ옄紐⑤뱶瑜??댁? 紐삵뻽?듬땲??";
   }
 }
 
@@ -1193,9 +1216,9 @@ function closeAdminModal() {
 
 function renderAdminUserRow(user) {
   const permissionLabels = [
-    ["uploadInventory", "재고등록"],
-    ["editMemo", "메모"],
-    ["editSchedule", "입고일정"],
+    ["uploadInventory", "?ш퀬?깅줉"],
+    ["editMemo", "硫붾え"],
+    ["editSchedule", "?낃퀬?쇱젙"],
     ["manageLinks", "변경코드"],
     ["manageUsers", "사용자관리"],
   ];
@@ -1207,7 +1230,7 @@ function renderAdminUserRow(user) {
       </div>
       <label class="admin-check">
         <input type="checkbox" data-admin-field="isActive" ${user.isActive ? "checked" : ""} />
-        사용
+        ?ъ슜
       </label>
       ${permissionLabels
         .map(
@@ -1243,7 +1266,7 @@ async function handleAdminPermissionChange(event) {
     if (serverKey) payload[serverKey] = field.checked;
   });
 
-  els.adminMessage.textContent = "권한 저장 중...";
+  els.adminMessage.textContent = "沅뚰븳 ???以?..";
   try {
     const response = await fetch("/api/admin/users", {
       method: "PUT",
@@ -1252,10 +1275,10 @@ async function handleAdminPermissionChange(event) {
       body: JSON.stringify(payload),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "권한 저장에 실패했습니다.");
-    els.adminMessage.textContent = "권한이 저장되었습니다.";
+    if (!response.ok) throw new Error(data.error || "沅뚰븳 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
+    els.adminMessage.textContent = "沅뚰븳????λ릺?덉뒿?덈떎.";
   } catch (error) {
-    els.adminMessage.textContent = error.message || "권한 저장에 실패했습니다.";
+    els.adminMessage.textContent = error.message || "沅뚰븳 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.";
     input.checked = !input.checked;
   }
 }
@@ -1272,27 +1295,27 @@ function renderParentCodeCell(item) {
 function renderSimpleStatus(value) {
   const status = normalizeSimpleStatus(value);
   if (!status) return `<span class="simple-status simple-status-empty">-</span>`;
-  const className = status === "승인" ? "simple-status-approved" : "simple-status-hold";
+  const className = status === "?뱀씤" ? "simple-status-approved" : "simple-status-hold";
   return `<span class="simple-status ${className}">${escapeHtml(status)}</span>`;
 }
 
 function getStatus(item) {
   if (item.parentCode) {
-    return { key: "parent", label: "메인코드", className: "status-parent" };
+    return { key: "parent", label: "硫붿씤肄붾뱶", className: "status-parent" };
   }
   if (item.availableStock < 0) {
-    return { key: "negative", label: "마이너스", className: "status-soldout" };
+    return { key: "negative", label: "留덉씠?덉뒪", className: "status-soldout" };
   }
   if (isHoldNeededItem(item)) {
-    return { key: "watch", label: "보류필요", className: "status-watch" };
+    return { key: "watch", label: "蹂대쪟?꾩슂", className: "status-watch" };
   }
   if (hasLowStockChange(item)) {
     return { key: "stockChange", label: "10개 미만 변동", className: "status-change" };
   }
   if (item.availableStock > 0 && item.availableStock <= 5) {
-    return { key: "low5", label: "5개 이하", className: "status-low5" };
+    return { key: "low5", label: "5媛??댄븯", className: "status-low5" };
   }
-  return { key: "ok", label: "정상", className: "status-ok" };
+  return { key: "ok", label: "?뺤긽", className: "status-ok" };
 }
 
 function sortItems(a, b) {
@@ -1305,8 +1328,8 @@ function sortItems(a, b) {
     getInventoryOrder(a) - getInventoryOrder(b) ||
     a.code.localeCompare(b.code, "ko", { numeric: true });
   const sortMode = els.sortSelect ? els.sortSelect.value : "default";
-  if (sortMode === "availableDesc") return simpleStatusSort || b.availableStock - a.availableStock || groupSort;
-  if (sortMode === "availableAsc") return simpleStatusSort || a.availableStock - b.availableStock || groupSort;
+  const directSort = sortBySelectedMode(a, b, sortMode);
+  if (directSort) return directSort;
   if (activeTab === "all") return simpleStatusSort || groupSort;
   if (activeTab === "allStockChanges") {
     return simpleStatusSort || parseDateValue(b.stockChangedAt || b.updatedAt) - parseDateValue(a.stockChangedAt || a.updatedAt) || groupSort;
@@ -1317,6 +1340,25 @@ function sortItems(a, b) {
     (rank[a.status.key] || 9) - (rank[b.status.key] || 9) ||
     groupSort
   );
+}
+
+function sortBySelectedMode(a, b, sortMode) {
+  const sorters = {
+    numberAsc: () => getInventoryOrder(a) - getInventoryOrder(b),
+    numberDesc: () => getInventoryOrder(b) - getInventoryOrder(a),
+    codeAsc: () => a.code.localeCompare(b.code, "ko", { numeric: true }),
+    codeDesc: () => b.code.localeCompare(a.code, "ko", { numeric: true }),
+    nameAsc: () => a.name.localeCompare(b.name, "ko", { numeric: true }),
+    nameDesc: () => b.name.localeCompare(a.name, "ko", { numeric: true }),
+    stockAsc: () => a.stock - b.stock,
+    stockDesc: () => b.stock - a.stock,
+    processingAsc: () => a.processingStock - b.processingStock,
+    processingDesc: () => b.processingStock - a.processingStock,
+    availableAsc: () => a.availableStock - b.availableStock,
+    availableDesc: () => b.availableStock - a.availableStock,
+  };
+  const sorter = sorters[sortMode];
+  return sorter ? sorter() : 0;
 }
 
 function getMainGroupCode(item) {
@@ -1345,9 +1387,12 @@ function getUrgentRank(item) {
 }
 
 function matchesActiveTab(item) {
-  if (activeTab === "zeroHidden") return Boolean(item.autoZeroHidden);
+  if (activeTab === "all") {
+    if (showAutoHiddenInAll) return Boolean(item.autoZeroHidden);
+    if (item.autoZeroHidden) return false;
+    return isApprovedSimpleItem(item);
+  }
   if (item.autoZeroHidden) return false;
-  if (activeTab === "all") return isApprovedSimpleItem(item);
   if (activeTab === "allStockChanges") return matchesChangeFilter(item);
   if (activeTab === "negative") return isNegativeTabItem(item);
   return item.status.key === activeTab;
@@ -1377,11 +1422,11 @@ function hasIncreaseChange(item) {
 }
 
 function isApprovedSimpleItem(item) {
-  return normalizeSimpleStatus(item.simpleStatus) === "승인";
+  return normalizeSimpleStatus(item.simpleStatus) === "?뱀씤";
 }
 
 function isHoldSimpleItem(item) {
-  return normalizeSimpleStatus(item.simpleStatus) === "보류";
+  return normalizeSimpleStatus(item.simpleStatus) === "蹂대쪟";
 }
 
 function isNegativeTabItem(item) {
@@ -1416,7 +1461,7 @@ function isNewWatchItem(item) {
 
 function isHoldNeededItem(item) {
   return (
-    normalizeSimpleStatus(item.simpleStatus) === "승인" &&
+    normalizeSimpleStatus(item.simpleStatus) === "?뱀씤" &&
     item.stock === 0 &&
     item.processingStock === 0 &&
     item.availableStock === 0
@@ -1428,7 +1473,7 @@ function wasHoldNeededBefore(item) {
   const previousProcessingStock = Number.isFinite(item.previousProcessingStock) ? item.previousProcessingStock : item.processingStock;
   const previousAvailableStock = getPreviousAvailableStock(item);
   return (
-    normalizeSimpleStatus(item.simpleStatus) === "승인" &&
+    normalizeSimpleStatus(item.simpleStatus) === "?뱀씤" &&
     previousStock === 0 &&
     previousProcessingStock === 0 &&
     previousAvailableStock === 0
@@ -1454,25 +1499,25 @@ function renderStockChangeCell(item) {
   const previous = item.previousAvailableStock;
   const current = item.availableStock;
   const delta = item.availableStockDelta;
-  const direction = delta > 0 ? "증가" : "감소";
+  const direction = delta > 0 ? "利앷?" : "媛먯냼";
   const className = delta > 0 ? "change-up" : "change-down";
   return `
     <td class="change-cell ${className}">
-      <strong>${formatNumber(previous)} → ${formatNumber(current)}</strong>
+      <strong>${formatNumber(previous)} ??${formatNumber(current)}</strong>
     </td>
   `;
 }
 
 function formatStockChangeText(item) {
   if (!hasLowStockChange(item)) return "";
-  const direction = item.availableStockDelta > 0 ? "증가" : "감소";
-  return `${formatNumber(item.previousAvailableStock)} → ${formatNumber(item.availableStock)} / ${formatNumber(Math.abs(item.availableStockDelta))}개 ${direction}`;
+  const direction = item.availableStockDelta > 0 ? "利앷?" : "媛먯냼";
+  return `${formatNumber(item.previousAvailableStock)} ??${formatNumber(item.availableStock)} / ${formatNumber(Math.abs(item.availableStockDelta))}媛?${direction}`;
 }
 
 function getSimpleStatusRank(item) {
   const status = normalizeSimpleStatus(item.simpleStatus);
-  if (status === "승인") return 1;
-  if (status === "보류") return 2;
+  if (status === "?뱀씤") return 1;
+  if (status === "蹂대쪟") return 2;
   return 3;
 }
 
@@ -1488,7 +1533,7 @@ function normalizeProductNameForGrouping(value) {
     .replace(/\[[^\]]*\]/g, " ")
     .replace(/\([^)]*\)/g, " ")
     .replace(/재소단|리더|심플|승인|보류/g, " ")
-    .replace(/\d{2,6}\s*(size|mm|cm|t|x|×)?/gi, " ")
+    .replace(/\d{2,6}\s*(size|mm|cm|t|x|횞)?/gi, " ")
     .replace(/[a-z]?\d{2,6}[a-z]?/gi, " ")
     .replace(/[_\-+/.,]/g, " ")
     .replace(/\s+/g, " ")
@@ -1508,11 +1553,20 @@ function getCodeFamily(code) {
 }
 
 function setTab(tab) {
-  activeTab = tab === "stockChange" ? "allStockChanges" : tab;
+  activeTab = tab === "stockChange" || tab === "zeroHidden" ? "allStockChanges" : tab;
   activeView = activeTab === "allStockChanges" ? "changes" : "all";
+  if (activeTab !== "all") showAutoHiddenInAll = false;
   if (activeTab === "allStockChanges" && !["all", "down", "up", "negative", "hold"].includes(changeFilter)) {
     changeFilter = "all";
   }
+  currentPage = 1;
+  render();
+}
+
+function toggleAutoHiddenInAll() {
+  activeTab = "all";
+  activeView = "all";
+  showAutoHiddenInAll = !showAutoHiddenInAll;
   currentPage = 1;
   render();
 }
@@ -1527,6 +1581,7 @@ function setChangeFilter(filter) {
 
 function setView(view) {
   activeTab = "all";
+  showAutoHiddenInAll = false;
   activeView = VIEW_COLUMNS[view] ? view : "all";
   if (activeView === "price" && !["priceDate", "period"].includes(priceMode)) priceMode = "priceDate";
   currentPage = 1;
@@ -1576,7 +1631,7 @@ async function handleFileSelection(mode) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setImportMeta(mode, `오류: ${message}`);
-    addActivity("파일 오류", message);
+    addActivity("?뚯씪 ?ㅻ쪟", message);
     persist();
     render();
   } finally {
@@ -1591,7 +1646,7 @@ function setImportMeta(mode, text) {
 
 function rowsToTable(rows, options = {}) {
   const cleanRows = rows.map((row) => row.map(normalizeCell)).filter((row) => row.some((value) => String(value).trim() !== ""));
-  if (!cleanRows.length) throw new Error("읽을 데이터가 없습니다.");
+  if (!cleanRows.length) throw new Error("?쎌쓣 ?곗씠?곌? ?놁뒿?덈떎.");
 
   const headerIndex = findHeaderIndex(cleanRows);
   const headers = cleanRows[headerIndex].map((header) => String(header || "").trim());
@@ -1630,9 +1685,9 @@ function findHeaderIndex(rows) {
 
 function applyInventoryImport(table, fileName, importedCodes = null, importContext = null) {
   const map = getColumnMap(table.headers);
-  if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
+  if (!map.code) throw new Error("?곹뭹肄붾뱶 而щ읆??李얠? 紐삵뻽?듬땲??");
   if (!map.stock && !map.processingStock && !map.availableStock) {
-    throw new Error("현재고/처리중/가용재고 중 하나 이상이 필요합니다.");
+    throw new Error("?꾩옱怨?泥섎━以?媛?⑹옱怨?以??섎굹 ?댁긽???꾩슂?⑸땲??");
   }
 
   const now = new Date().toISOString();
@@ -1649,7 +1704,7 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
     }
 
     const importedName = map.name ? String(record[map.name] || "").trim() : "";
-    if (importedName.includes("스크래치")) {
+    if (importedName.includes("?ㅽ겕?섏튂")) {
       skipped += 1;
       return;
     }
@@ -1769,8 +1824,8 @@ function shouldAutoHideZeroStock(stock, processingStock) {
 
 function applyOrderImport(table, fileName) {
   const map = getColumnMap(table.headers);
-  if (!map.code) throw new Error("상품코드 컬럼을 찾지 못했습니다.");
-  if (!map.orderQty) throw new Error("주문수량 컬럼을 찾지 못했습니다.");
+  if (!map.code) throw new Error("?곹뭹肄붾뱶 而щ읆??李얠? 紐삵뻽?듬땲??");
+  if (!map.orderQty) throw new Error("二쇰Ц?섎웾 而щ읆??李얠? 紐삵뻽?듬땲??");
 
   const orderMap = new Map();
   table.records.forEach((record) => {
@@ -1828,15 +1883,15 @@ function applyOrderImport(table, fileName) {
     created += 1;
   });
 
-  const summary = `주문서 표시 ${marked}개, 신규 확인필요 ${created}개, 주문수량 ${totalQty}개`;
-  addActivity("주문서 확인 반영", `${fileName}: ${summary}`);
+  const summary = `추가 ${added}개, 갱신 ${updated}개, 제외 ${skipped}개`;
+  addActivity("심플 전체 재고목록 반영", `${fileName}: ${summary}`);
   return { columns: Object.values(map), summary };
 }
 
 function applyScheduleImport(table, fileName) {
   const map = getColumnMap(table.headers);
-  if (!map.code) throw new Error("상품번호 컬럼을 찾지 못했습니다.");
-  if (!map.inboundDate && !map.inboundQty) throw new Error("입고일정 또는 입고수량 컬럼이 필요합니다.");
+  if (!map.code) throw new Error("?곹뭹踰덊샇 而щ읆??李얠? 紐삵뻽?듬땲??");
+  if (!map.inboundDate && !map.inboundQty) throw new Error("?낃퀬?쇱젙 ?먮뒗 ?낃퀬?섎웾 而щ읆???꾩슂?⑸땲??");
 
   const now = new Date().toISOString();
   let updated = 0;
@@ -1880,18 +1935,18 @@ function applyScheduleImport(table, fileName) {
 
     if (map.name && !item.name) item.name = String(record[map.name] || "").trim();
     if (map.inboundDate) {
-      recordItemEdit(item, "입고일정", item.inboundDate, inboundDate);
+      recordItemEdit(item, "?낃퀬?쇱젙", item.inboundDate, inboundDate);
       item.inboundDate = inboundDate;
     }
     if (map.inboundQty) {
-      recordItemEdit(item, "입고수량", item.inboundQty, inboundQty);
+      recordItemEdit(item, "?낃퀬?섎웾", item.inboundQty, inboundQty);
       item.inboundQty = inboundQty;
     }
     item.updatedAt = now;
   });
 
-  const summary = `갱신 ${updated}개, 신규 ${created}개, 제외 ${skipped}개`;
-  addActivity("입고일정 반영", `${fileName}: ${summary}`);
+  const summary = `추가 ${added}개, 갱신 ${updated}개, 제외 ${skipped}개`;
+  addActivity("심플 전체 재고목록 반영", `${fileName}: ${summary}`);
   return { columns: Object.values(map), summary };
 }
 
@@ -1929,7 +1984,7 @@ async function parseFile(file) {
     return parseDelimitedText(text, extension === "tsv" ? "\t" : detectDelimiter(text));
   }
   if (extension === "xlsx") return parseXlsx(file);
-  throw new Error("CSV, TSV, XLSX 파일만 지원합니다.");
+  throw new Error("CSV, TSV, XLSX ?뚯씪留?吏?먰빀?덈떎.");
 }
 
 function parseDelimitedText(text, delimiter) {
@@ -1985,7 +2040,7 @@ async function parseXlsx(file) {
   const workbook = parser.parseFromString(workbookXml, "application/xml");
   const rels = parser.parseFromString(relsXml, "application/xml");
   const sheet = workbook.getElementsByTagNameNS("*", "sheet")[0];
-  if (!sheet) throw new Error("XLSX 시트를 찾지 못했습니다.");
+  if (!sheet) throw new Error("XLSX ?쒗듃瑜?李얠? 紐삵뻽?듬땲??");
   const relId = sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
   const target = findRelationshipTarget(rels, relId);
   const sharedStrings = entries["xl/sharedStrings.xml"] ? parseSharedStrings(decodeEntry(entries, "xl/sharedStrings.xml")) : [];
@@ -2000,7 +2055,7 @@ async function unzip(bytes) {
   const entries = {};
 
   for (let index = 0; index < totalEntries; index += 1) {
-    if (view.getUint32(pointer, true) !== 0x02014b50) throw new Error("XLSX 구조를 읽지 못했습니다.");
+    if (view.getUint32(pointer, true) !== 0x02014b50) throw new Error("XLSX 援ъ“瑜??쎌? 紐삵뻽?듬땲??");
     const method = view.getUint16(pointer + 10, true);
     const compressedSize = view.getUint32(pointer + 20, true);
     const fileNameLength = view.getUint16(pointer + 28, true);
@@ -2024,18 +2079,18 @@ function findEndOfCentralDirectory(view) {
   for (let offset = view.byteLength - 22; offset >= min; offset -= 1) {
     if (view.getUint32(offset, true) === 0x06054b50) return offset;
   }
-  throw new Error("XLSX 끝부분을 찾지 못했습니다.");
+  throw new Error("XLSX ?앸?遺꾩쓣 李얠? 紐삵뻽?듬땲??");
 }
 
 async function inflateRaw(bytes) {
-  if (!("DecompressionStream" in window)) throw new Error("이 브라우저는 XLSX 압축 해제를 지원하지 않습니다.");
+  if (!("DecompressionStream" in window)) throw new Error("??釉뚮씪?곗???XLSX ?뺤텞 ?댁젣瑜?吏?먰븯吏 ?딆뒿?덈떎.");
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 function decodeEntry(entries, path) {
   const entry = entries[path];
-  if (!entry) throw new Error(`${path} 항목을 찾지 못했습니다.`);
+  if (!entry) throw new Error(`${path} ??ぉ??李얠? 紐삵뻽?듬땲??`);
   return decodeBytes(entry);
 }
 
@@ -2101,7 +2156,7 @@ function columnNameToIndex(name) {
 function renderImportPanel() {
   els.columnChips.innerHTML = state.lastColumns.length
     ? state.lastColumns.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")
-    : `<span class="chip">대기중</span>`;
+    : `<span class="chip">?湲곗쨷</span>`;
 
   els.activityList.innerHTML = state.activity.length
     ? state.activity
@@ -2118,7 +2173,7 @@ function renderImportPanel() {
           `,
         )
         .join("")
-    : `<div class="empty-state"><strong>처리 기록이 없습니다.</strong></div>`;
+    : `<div class="empty-state"><strong>泥섎━ 湲곕줉???놁뒿?덈떎.</strong></div>`;
 }
 
 function addActivity(title, detail) {
@@ -2133,10 +2188,88 @@ function clearActivity() {
 }
 
 function clearAllData() {
-  if (!confirm("현재 저장된 재고 데이터를 모두 지울까요?")) return;
+  if (!confirm("?꾩옱 ??λ맂 ?ш퀬 ?곗씠?곕? 紐⑤몢 吏?멸퉴??")) return;
   state = createDefaultState();
   persist();
   render();
+}
+
+function getCurrentVisibleRows() {
+  const query = normalizeSearch(els.searchInput.value);
+  return state.items
+    .filter(isVisibleInventoryItem)
+    .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }))
+    .filter((item) => {
+      if (!matchesActiveTab(item)) return false;
+      if (!query) return true;
+      return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note} ${formatSalesLinksSearch(item.salesLinks)} ${formatPriceTrackingSearch(item)}`).includes(query);
+    })
+    .sort(sortItems);
+}
+
+function getSelectedVisibleRows() {
+  return getCurrentVisibleRows().filter((item) => selectedItemCodes.has(item.code));
+}
+
+function getCurrentPageRows() {
+  const rows = getCurrentVisibleRows();
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, currentPage), totalPages);
+  return rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+}
+
+function areVisibleRowsSelected() {
+  const rows = getCurrentPageRows();
+  return rows.length > 0 && rows.every((item) => selectedItemCodes.has(item.code));
+}
+
+function handleSelectionChange(event) {
+  const visibleCheckbox = event.target.closest("[data-select-visible]");
+  if (visibleCheckbox) {
+    getCurrentPageRows().forEach((item) => {
+      if (visibleCheckbox.checked) selectedItemCodes.add(item.code);
+      else selectedItemCodes.delete(item.code);
+    });
+    render();
+    return;
+  }
+
+  const rowCheckbox = event.target.closest("[data-row-select]");
+  if (!rowCheckbox) return;
+  const code = rowCheckbox.dataset.code || "";
+  if (rowCheckbox.checked) selectedItemCodes.add(code);
+  else selectedItemCodes.delete(code);
+  render();
+}
+
+function exportSelectedItems() {
+  const rows = getSelectedVisibleRows();
+  if (!rows.length) {
+    alert("다운받을 상품을 먼저 체크해주세요.");
+    return;
+  }
+  const lines = activeTab === "allStockChanges" ? rows.map(formatSelectedChangeLine) : rows.map(formatSelectedInventoryLine);
+  downloadText(lines.join("\r\n"), activeTab === "allStockChanges" ? `selected_stock_changes_${new Date().toISOString().slice(0, 10)}.txt` : `selected_inventory_${new Date().toISOString().slice(0, 10)}.txt`);
+}
+
+function formatSelectedInventoryLine(item) {
+  return `${item.code}\t${item.name} ${formatNumber(item.stock)}/${formatNumber(item.processingStock)}/${formatNumber(item.stock - item.processingStock)}`;
+}
+
+function formatSelectedChangeLine(item) {
+  const previous = [getStockChangePair(item, "stock")?.previous ?? item.stock, getStockChangePair(item, "processingStock")?.previous ?? item.processingStock, getStockChangePair(item, "availableStock")?.previous ?? item.stock - item.processingStock];
+  const current = [item.stock, item.processingStock, item.stock - item.processingStock];
+  return `${item.code}\t${item.name} ${previous.map(formatNumber).join("/")} > ${current.map(formatNumber).join("/")}`;
+}
+
+function downloadText(text, filename) {
+  const blob = new Blob([`\uFEFF${text}`], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportCsv() {
@@ -2155,7 +2288,7 @@ function exportCsv() {
           item.status.label,
           item.code,
           item.codeChange,
-          item.parentCode ? "메인코드" : "",
+          item.parentCode ? "硫붿씤肄붾뱶" : "",
           item.mainCode,
           item.simpleStatus,
           item.name,
@@ -2168,7 +2301,7 @@ function exportCsv() {
           item.inboundDate,
           item.inboundQty,
           item.orderQty,
-          item.inSimpleStock ? item.source || "심플 재고목록" : "주문서/기존자료",
+          item.inSimpleStock ? item.source || "?ы뵆 ?ш퀬紐⑸줉" : "二쇰Ц??湲곗〈?먮즺",
           formatSalesLinksForCsv(item.salesLinks),
           formatPriceSettingsForCsv(item.priceSettings),
           formatPeriodSalesForCsv(item),
@@ -2183,7 +2316,7 @@ function exportCsv() {
 
 function exportStockChangesCsv() {
   const rows = [
-    ["상품코드", "변경코드", "상품명", "심플상태", "현재고 변동", "처리중 변동", "가용재고 변동", "수정일", "메모"],
+    ["상품코드", "상품명", "심플상태", "현재고 변동", "처리중 변동", "가용재고 변동", "수정일", "메모"],
     ...state.items
       .filter(isVisibleInventoryItem)
       .map((item) => ({ ...item, status: getStatus(item) }))
@@ -2191,7 +2324,6 @@ function exportStockChangesCsv() {
       .sort(sortItems)
       .map((item) => [
         item.code,
-        item.codeChange || "",
         item.name,
         item.simpleStatus,
         formatStockPairForCsv(item, "stock"),
@@ -2222,8 +2354,8 @@ function downloadCsv(rows, filename) {
 
 function downloadScheduleTemplate() {
   const link = document.createElement("a");
-  link.href = "/입고일정_등록양식.xlsx";
-  link.download = "입고일정_등록양식.xlsx";
+  link.href = "/?낃퀬?쇱젙_?깅줉?묒떇.xlsx";
+  link.download = "?낃퀬?쇱젙_?깅줉?묒떇.xlsx";
   link.click();
 }
 
@@ -2247,8 +2379,8 @@ function normalizeCode(value) {
 function normalizeSimpleStatus(value) {
   const text = String(value ?? "").trim();
   if (!text) return "";
-  if (text.includes("승인")) return "승인";
-  if (text.includes("보류")) return "보류";
+  if (text.includes("?뱀씤")) return "?뱀씤";
+  if (text.includes("蹂대쪟")) return "蹂대쪟";
   return "";
 }
 
@@ -2271,7 +2403,7 @@ function normalizeInboundDate(value) {
 
   const text = String(value ?? "").trim();
   if (!text) return "";
-  const match = text.match(/^(\d{2,4})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/);
+  const match = text.match(/^(\d{2,4})[.\-/??s]+(\d{1,2})[.\-/??s]+(\d{1,2})/);
   if (!match) return text;
   const year = match[1].length === 2 ? `20${match[1]}` : match[1];
   const month = String(Number(match[2])).padStart(2, "0");
@@ -2316,7 +2448,7 @@ function hasPriceSettingContent(entry) {
 function formatPriceSettingForHistory(entry) {
   if (!entry) return "";
   const priceText = entry.oldPrice || entry.newPrice ? `${entry.oldPrice || "-"} -> ${entry.newPrice || "-"}` : "";
-  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
+  const qtyText = entry.soldQty ? `${entry.soldQty}媛??먮ℓ` : "";
   return [priceText, entry.date, qtyText, entry.memo].filter(Boolean).join(" / ");
 }
 
@@ -2346,7 +2478,7 @@ function hasPeriodSaleContent(entry) {
 function formatPeriodSaleForHistory(entry) {
   if (!entry) return "";
   const periodText = entry.startDate || entry.endDate ? `${entry.startDate || "-"} ~ ${entry.endDate || "-"}` : "";
-  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
+  const qtyText = entry.soldQty ? `${entry.soldQty}媛??먮ℓ` : "";
   return [periodText, qtyText, entry.memo].filter(Boolean).join(" / ");
 }
 
@@ -2367,7 +2499,7 @@ function formatPeriodSalesForCsv(itemOrRows) {
   const range = getPeriodQueryRange();
   const stats = getPeriodSalesStats(itemOrRows, range);
   if (!range.start || !range.end) return "";
-  return `${formatPeriodRangeLabel(range)} / 판매 ${formatNumber(stats.soldQty)}개 / 증가 ${formatNumber(stats.increasedQty)}개 / 순변동 ${formatSignedNumber(stats.netChange)}개 / 기록 ${formatNumber(stats.logCount)}건`;
+  return `${formatPeriodRangeLabel(range)} / 판매 ${formatNumber(stats.soldQty)}개 / 증가 ${formatNumber(stats.increasedQty)}개 / 차이 ${formatSignedNumber(stats.netChange)}개 / 기록 ${formatNumber(stats.logCount)}건`;
 }
 
 function normalizeStockLogs(value) {
@@ -2524,7 +2656,7 @@ function renameLegacyMainCodeText(value) {
 
 function formatHistoryForCsv(history) {
   return normalizeItemHistory(history)
-    .map((entry) => `${formatDate(entry.at)} / ${entry.author} / ${entry.field} / ${entry.before || "빈칸"} → ${entry.after || "빈칸"}`)
+    .map((entry) => `${formatDate(entry.at)} / ${entry.author} / ${entry.field} / ${entry.before || "鍮덉뭏"} ??${entry.after || "鍮덉뭏"}`)
     .join(" | ");
 }
 
@@ -2573,7 +2705,7 @@ function createXlsxBlob(rows) {
 </Relationships>`,
     "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets><sheet name="입고일정" sheetId="1" r:id="rId1"/></sheets>
+  <sheets><sheet name="?낃퀬?쇱젙" sheetId="1" r:id="rId1"/></sheets>
 </workbook>`,
     "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -2693,3 +2825,19 @@ function createId() {
   if (crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
