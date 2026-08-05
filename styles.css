@@ -749,14 +749,14 @@ tbody tr:hover td {
 }
 
 .sales-links-cell {
-  min-width: 720px;
-  max-width: 860px;
+  min-width: 620px;
+  max-width: 780px;
 }
 
 .sales-link-head,
 .sales-link-row {
   display: grid;
-  grid-template-columns: minmax(88px, 0.8fr) minmax(190px, 1.4fr) 72px minmax(220px, 1.6fr) 58px;
+  grid-template-columns: minmax(220px, 1.5fr) 72px minmax(240px, 1.6fr) 58px;
   gap: 8px;
   align-items: center;
 }
@@ -1435,8 +1435,8 @@ tr.row-low5 td {
 }
 
 .price-tracking-cell {
-  min-width: 760px;
-  max-width: 940px;
+  min-width: 420px;
+  max-width: 560px;
 }
 
 .price-tracking-head,
@@ -1448,7 +1448,7 @@ tr.row-low5 td {
 
 .price-date-head,
 .price-date-row {
-  grid-template-columns: 96px 96px 110px 72px minmax(160px, 1fr) 58px;
+  grid-template-columns: 96px 96px 110px 58px;
 }
 
 .period-sale-head,

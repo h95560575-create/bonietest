@@ -1,10 +1,10 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=stock-schedule-layout-20260729" />
+    <title>?ш퀬 ?뚯쭊 ?⑥쥌???ш퀬 ?뺤씤</title>
+    <link rel="stylesheet" href="styles.css?v=merge-catalog-price-20260804" />
   </head>
   <body>
     <div class="app-shell">
@@ -12,70 +12,68 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">B</div>
           <div>
-            <h1>재고 소진 단종품 재고 확인</h1>
-            <p id="saveStatus">로컬 저장 준비됨</p>
+            <h1>?ш퀬 ?뚯쭊 ?⑥쥌???ш퀬 ?뺤씤</h1>
+            <p id="saveStatus">濡쒖뺄 ???以鍮꾨맖</p>
           </div>
         </div>
         <div class="top-actions">
-          <button class="button" id="exportBtn" type="button">CSV 내보내기</button>
-          <button class="button subtle" id="adminBtn" type="button" hidden>관리자모드</button>
-          <button class="button primary" id="loginBtn" type="button">로그인</button>
-          <!-- <button class="button subtle" id="clearDataBtn" type="button">초기화</button> -->
+          <button class="button" id="exportBtn" type="button">CSV ?대낫?닿린</button>
+          <button class="button subtle" id="adminBtn" type="button" hidden>愿由ъ옄紐⑤뱶</button>
+          <button class="button primary" id="loginBtn" type="button">濡쒓렇??/button>
+          <!-- <button class="button subtle" id="clearDataBtn" type="button">珥덇린??/button> -->
         </div>
       </header>
 
       <main class="workspace">
-        <section class="summary-grid" aria-label="재고 요약">
+        <section class="summary-grid" aria-label="?ш퀬 ?붿빟">
           <button class="metric" data-jump-tab="all" type="button">
-            <span>전체 상품</span>
+            <span>?꾩껜 ?곹뭹</span>
             <strong id="totalCount">0</strong>
           </button>
           <button class="metric danger" data-jump-tab="negative" type="button">
-            <span>마이너스</span>
+            <span>留덉씠?덉뒪</span>
             <strong id="negativeCount">0</strong>
           </button>
           <button class="metric warning" data-jump-tab="allStockChanges" type="button">
-            <span>변동내역</span>
+            <span>蹂?숇궡??/span>
             <strong id="watchCount">0</strong>
           </button>
         </section>
 
         <section class="control-bar">
-          <nav class="tabs" aria-label="재고 보기">
-            <button class="tab" data-tab="watch" type="button">보류필요</button>
-            <button class="tab" data-tab="allStockChanges" type="button">변동내역</button>
-            <button class="tab" data-tab="negative" type="button">마이너스</button>
-            <button class="tab" data-tab="import" type="button">파일등록</button>
+          <nav class="tabs" aria-label="?ш퀬 蹂닿린">
+            <button class="tab" data-tab="watch" type="button">蹂대쪟?꾩슂</button>
+            <button class="tab" data-tab="allStockChanges" type="button">蹂?숇궡??/button>
+            <button class="tab" data-tab="negative" type="button">留덉씠?덉뒪</button>
+            <button class="tab" data-tab="import" type="button">?뚯씪?깅줉</button>
           </nav>
           <div class="filters">
             <label class="field author-field">
-              <span>로그인 사용자</span>
-              <input id="authorInput" type="text" placeholder="로그인 필요" autocomplete="off" readonly />
+              <span>濡쒓렇???ъ슜??/span>
+              <input id="authorInput" type="text" placeholder="濡쒓렇???꾩슂" autocomplete="off" readonly />
             </label>
             <label class="field compact">
-              <span>검색</span>
-              <input id="searchInput" type="search" placeholder="상품코드, 상품명" autocomplete="off" />
+              <span>寃??/span>
+              <input id="searchInput" type="search" placeholder="?곹뭹肄붾뱶, ?곹뭹紐? autocomplete="off" />
             </label>
             <label class="field sort-field">
-              <span>정렬</span>
+              <span>?뺣젹</span>
               <select id="sortSelect">
-                <option value="default">기본순서</option>
-                <option value="numberAsc">번호 낮은순</option>
-                <option value="numberDesc">번호 높은순</option>
-                <option value="codeAsc">상품코드 낮은순</option>
-                <option value="codeDesc">상품코드 높은순</option>
-                <option value="nameAsc">상품명 가나다순</option>
-                <option value="nameDesc">상품명 가나다 역순</option>
-                <option value="stockAsc">현재고 적은순</option>
-                <option value="stockDesc">현재고 많은순</option>
-                <option value="processingAsc">처리중 적은순</option>
-                <option value="processingDesc">처리중 많은순</option>
-                <option value="availableAsc">가용재고 적은순</option>
-                <option value="availableDesc">가용재고 많은순</option>
-                <option value="priceSoldAsc">가격조정 판매량 적은순</option>
-                <option value="priceSoldDesc">가격조정 판매량 많은순</option>
-                <option value="periodSoldAsc">기간 판매량 적은순</option>
-                <option value="periodSoldDesc">기간 판매량 많은순</option>
+                <option value="default">湲곕낯?쒖꽌</option>
+                <option value="numberAsc">踰덊샇 ?????/option>
+                <option value="numberDesc">踰덊샇 ?믪???/option>
+                <option value="codeAsc">?곹뭹肄붾뱶 ?????/option>
+                <option value="codeDesc">?곹뭹肄붾뱶 ?믪???/option>
+                <option value="nameAsc">?곹뭹紐?媛?섎떎??/option>
+                <option value="nameDesc">?곹뭹紐?媛?섎떎 ??닚</option>
+                <option value="stockAsc">?꾩옱怨??곸???/option>
+                <option value="stockDesc">?꾩옱怨?留롮???/option>
+                <option value="processingAsc">泥섎━以??곸???/option>
+                <option value="processingDesc">泥섎━以?留롮???/option>
+                <option value="availableAsc">媛?⑹옱怨??곸???/option>
+                <option value="availableDesc">媛?⑹옱怨?留롮???/option>
+                <option value="periodSoldAsc">湲곌컙 ?먮ℓ???곸???/option>
+                <option value="periodSoldDesc">湲곌컙 ?먮ℓ??留롮???/option>
               </select>
             </label>
           </div>
@@ -83,31 +81,31 @@
 
         <section class="panel" id="inventoryPanel">
           <div class="panel-toolbar">
-            <nav class="view-tabs" aria-label="표시 항목 보기">
-              <button class="view-tab active" data-view="all" type="button">전체</button>
-              <button class="view-tab" data-view="stock" type="button">재고/일정</button>
-              <button class="view-tab" data-view="catalog" type="button">구성/링크</button>
-              <button class="view-tab" data-view="depletion" type="button">소진예상일</button>
-              <button class="view-tab" data-view="price" type="button">가격조정</button>
+            <nav class="view-tabs" aria-label="?쒖떆 ??ぉ 蹂닿린">
+              <button class="view-tab active" data-view="all" type="button">?꾩껜</button>
+              <button class="view-tab" data-view="stock" type="button">?ш퀬/?쇱젙</button>
+              <button class="view-tab" data-view="catalog" type="button">援ъ꽦/留곹겕</button>
             </nav>
             <div class="price-mode-bar" id="priceModeBar" hidden>
-              <button class="price-mode-button active" data-price-mode="priceDate" type="button">가격설정 기준</button>
+              <button class="price-mode-button active" data-price-mode="links" type="button">판매링크</button>
+              <button class="price-mode-button" data-price-mode="priceDate" type="button">가격설정 기준</button>
               <button class="price-mode-button" data-price-mode="period" type="button">기간 판매 조회</button>
+              <button class="price-mode-button" data-price-mode="depletion" type="button">소진예상일</button>
             </div>
             <div class="period-query-bar" id="periodQueryBar" hidden>
-              <label>시작일 <input id="periodStartInput" type="date" /></label>
-              <label>종료일 <input id="periodEndInput" type="date" /></label>
+              <label>?쒖옉??<input id="periodStartInput" type="date" /></label>
+              <label>醫낅즺??<input id="periodEndInput" type="date" /></label>
             </div>
             <div class="change-filter-bar" id="changeFilterBar" hidden>
-              <button class="change-filter-button active" data-change-filter="all" type="button">전체</button>
-              <button class="change-filter-button" data-change-filter="down" type="button">감소만</button>
-              <button class="change-filter-button" data-change-filter="up" type="button">증가만</button>
-              <button class="change-filter-button" data-change-filter="negative" type="button">마이너스만</button>
-              <button class="change-filter-button" data-change-filter="hold" type="button">보류 변동만</button>
+              <button class="change-filter-button active" data-change-filter="all" type="button">?꾩껜</button>
+              <button class="change-filter-button" data-change-filter="down" type="button">媛먯냼留?/button>
+              <button class="change-filter-button" data-change-filter="up" type="button">利앷?留?/button>
+              <button class="change-filter-button" data-change-filter="negative" type="button">留덉씠?덉뒪留?/button>
+              <button class="change-filter-button" data-change-filter="hold" type="button">蹂대쪟 蹂?숇쭔</button>
             </div>
             <div class="selection-action-bar">
-              <button class="button subtle auto-hidden-toggle" id="autoHiddenToggleBtn" type="button" hidden>자동숨김 보기</button>
-              <button class="button subtle selected-download" id="selectedDownloadBtn" type="button" hidden>선택 목록 다운로드</button>
+              <button class="button subtle auto-hidden-toggle" id="autoHiddenToggleBtn" type="button" hidden>?먮룞?④? 蹂닿린</button>
+              <button class="button subtle selected-download" id="selectedDownloadBtn" type="button" hidden>?좏깮 紐⑸줉 ?ㅼ슫濡쒕뱶</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -119,13 +117,13 @@
             </table>
           </div>
           <div class="empty-state" id="emptyState" hidden>
-            <strong>표시할 상품이 없습니다.</strong>
+            <strong>?쒖떆???곹뭹???놁뒿?덈떎.</strong>
           </div>
           <div class="pagination-bar" id="paginationBar" hidden>
-            <button class="page-edge" id="firstPageBtn" type="button">맨처음</button>
+            <button class="page-edge" id="firstPageBtn" type="button">留⑥쿂??/button>
             <div class="page-number-list" id="pageNumberList"></div>
-            <button class="page-edge" id="lastPageBtn" type="button">맨끝</button>
-            <span id="pageInfo">총 0개</span>
+            <button class="page-edge" id="lastPageBtn" type="button">留⑤걹</button>
+            <span id="pageInfo">珥?0媛?/span>
           </div>
         </section>
 
@@ -133,42 +131,42 @@
           <div class="import-grid">
             <div class="import-box">
               <div>
-                <h2>심플 전체 재고목록</h2>
-                <p id="inventoryImportMeta">상품명, 코드, 현재고, 처리중, 가용재고가 있는 CSV/TSV/XLSX</p>
+                <h2>?ы뵆 ?꾩껜 ?ш퀬紐⑸줉</h2>
+                <p id="inventoryImportMeta">?곹뭹紐? 肄붾뱶, ?꾩옱怨? 泥섎━以? 媛?⑹옱怨좉? ?덈뒗 CSV/TSV/XLSX</p>
               </div>
-              <button class="button primary" id="inventoryImportBtn" type="button">재고목록 등록</button>
+              <button class="button primary" id="inventoryImportBtn" type="button">?ш퀬紐⑸줉 ?깅줉</button>
               <input id="inventoryFileInput" type="file" accept=".csv,.tsv,.xlsx" multiple hidden />
             </div>
             <div class="import-box">
               <div>
-                <h2>주문서</h2>
-                <p id="orderImportMeta">상품명, 코드, 주문수량이 있는 CSV/TSV/XLSX</p>
+                <h2>二쇰Ц??/h2>
+                <p id="orderImportMeta">?곹뭹紐? 肄붾뱶, 二쇰Ц?섎웾???덈뒗 CSV/TSV/XLSX</p>
               </div>
-              <button class="button primary" id="orderImportBtn" type="button">주문서 등록</button>
+              <button class="button primary" id="orderImportBtn" type="button">二쇰Ц???깅줉</button>
               <input id="orderFileInput" type="file" accept=".csv,.tsv,.xlsx" multiple hidden />
             </div>
             <div class="import-box">
               <div>
-                <h2>입고일정</h2>
-                <p id="scheduleImportMeta">상품번호, 상품명, 입고일정, 입고수량 양식</p>
+                <h2>?낃퀬?쇱젙</h2>
+                <p id="scheduleImportMeta">?곹뭹踰덊샇, ?곹뭹紐? ?낃퀬?쇱젙, ?낃퀬?섎웾 ?묒떇</p>
               </div>
               <div class="button-row">
-                <button class="button" id="scheduleTemplateBtn" type="button">양식 다운로드</button>
-                <button class="button primary" id="scheduleImportBtn" type="button">입고일정 등록</button>
+                <button class="button" id="scheduleTemplateBtn" type="button">?묒떇 ?ㅼ슫濡쒕뱶</button>
+                <button class="button primary" id="scheduleImportBtn" type="button">?낃퀬?쇱젙 ?깅줉</button>
               </div>
               <input id="scheduleFileInput" type="file" accept=".csv,.tsv,.xlsx" multiple hidden />
             </div>
           </div>
 
           <div class="mapping-panel">
-            <h2>최근 인식 컬럼</h2>
+            <h2>理쒓렐 ?몄떇 而щ읆</h2>
             <div class="column-chips" id="columnChips"></div>
           </div>
 
           <div class="activity-panel">
             <div class="section-title">
-              <h2>처리 기록</h2>
-              <button class="button subtle" id="clearLogBtn" type="button">기록 비우기</button>
+              <h2>泥섎━ 湲곕줉</h2>
+              <button class="button subtle" id="clearLogBtn" type="button">湲곕줉 鍮꾩슦湲?/button>
             </div>
             <div class="activity-list" id="activityList"></div>
           </div>
@@ -180,10 +178,10 @@
       <section class="history-modal" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
         <div class="history-modal-head">
           <div>
-            <span>상품별 자동수정기록</span>
-            <h2 id="historyTitle">기록보기</h2>
+            <span>?곹뭹蹂??먮룞?섏젙湲곕줉</span>
+            <h2 id="historyTitle">湲곕줉蹂닿린</h2>
           </div>
-          <button class="icon-button" id="historyCloseBtn" type="button" aria-label="닫기">×</button>
+          <button class="icon-button" id="historyCloseBtn" type="button" aria-label="?リ린">횞</button>
         </div>
         <div class="history-list" id="historyList"></div>
       </section>
@@ -193,23 +191,23 @@
       <section class="history-modal login-modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
         <div class="history-modal-head">
           <div>
-            <span>사용자 확인</span>
-            <h2 id="loginTitle">로그인</h2>
+            <span>?ъ슜???뺤씤</span>
+            <h2 id="loginTitle">濡쒓렇??/h2>
           </div>
-          <button class="icon-button" id="loginCloseBtn" type="button" aria-label="닫기">×</button>
+          <button class="icon-button" id="loginCloseBtn" type="button" aria-label="?リ린">횞</button>
         </div>
         <form class="login-form" id="loginForm">
           <label class="field">
-            <span>아이디</span>
-            <input id="loginName" type="text" placeholder="아이디" autocomplete="username" required />
+            <span>?꾩씠??/span>
+            <input id="loginName" type="text" placeholder="?꾩씠?? autocomplete="username" required />
           </label>
           <label class="field">
-            <span>비밀번호</span>
-            <input id="loginPassword" type="password" placeholder="비밀번호" required />
+            <span>鍮꾨?踰덊샇</span>
+            <input id="loginPassword" type="password" placeholder="鍮꾨?踰덊샇" required />
           </label>
           <p class="login-message" id="loginMessage"></p>
           <div class="dialog-actions">
-            <button class="button primary" type="submit">로그인</button>
+            <button class="button primary" type="submit">濡쒓렇??/button>
           </div>
         </form>
       </section>
@@ -219,16 +217,19 @@
       <section class="history-modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
         <div class="history-modal-head">
           <div>
-            <span>관리자 전용</span>
-            <h2 id="adminTitle">사용자 권한</h2>
+            <span>愿由ъ옄 ?꾩슜</span>
+            <h2 id="adminTitle">?ъ슜??沅뚰븳</h2>
           </div>
-          <button class="icon-button" id="adminCloseBtn" type="button" aria-label="닫기">×</button>
+          <button class="icon-button" id="adminCloseBtn" type="button" aria-label="?リ린">횞</button>
         </div>
         <div class="admin-user-list" id="adminUserList"></div>
         <p class="login-message" id="adminMessage"></p>
       </section>
     </div>
 
-    <script src="app.js?v=stock-schedule-layout-20260729"></script>
+    <script src="app.js?v=merge-catalog-price-20260804"></script>
   </body>
 </html>
+
+
+

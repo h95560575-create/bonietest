@@ -39,10 +39,10 @@ const VIEW_COLUMNS = {
   core: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   stock: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   catalog: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "history"],
+  links: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "salesLinks", "updatedAt", "history"],
   depletion: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt"],
   priceDate: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
   period: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
-  price: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
   changes: ["select", "sequence", "status", "code", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
   watch: ["sequence", "status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   all: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
@@ -55,7 +55,6 @@ const HEADER_SORT_MODES = {
   stock: ["stockAsc", "stockDesc"],
   processingStock: ["processingAsc", "processingDesc"],
   availableStock: ["availableAsc", "availableDesc"],
-  priceSettings: ["priceSoldAsc", "priceSoldDesc"],
   periodSales: ["periodSoldAsc", "periodSoldDesc"],
 };
 
@@ -92,7 +91,7 @@ const ALIAS_SETS = Object.fromEntries(
 let state = loadState();
 let activeTab = "all";
 let activeView = "all";
-let priceMode = "priceDate";
+let priceMode = "links";
 let changeFilter = "all";
 let currentPage = 1;
 let serverSyncEnabled = false;
@@ -448,10 +447,13 @@ async function refreshSharedState() {
 }
 
 function render() {
-  const items = state.items.filter(isNormallyVisibleInventoryItem).map((item) => ({ ...item, status: getStatus(item) }));
+  const visibleItems = state.items
+    .filter(isVisibleInventoryItem)
+    .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }));
+  const items = visibleItems.filter((item) => !item.autoZeroHidden);
   const total = items.length;
-  const negative = items.filter(isNegativeTabItem).length;
-  const watch = items.filter(hasAnyStockChange).length;
+  const negative = visibleItems.filter(isNegativeTabItem).length;
+  const watch = visibleItems.filter(isHoldNeededItem).length;
 
   els.totalCount.textContent = formatNumber(total);
   els.negativeCount.textContent = formatNumber(negative);
@@ -466,14 +468,14 @@ function render() {
   });
 
   if (els.priceModeBar) {
-    els.priceModeBar.hidden = !(activeTab === "all" && activeView === "price");
+    els.priceModeBar.hidden = !(activeTab === "all" && activeView === "catalog");
     document.querySelectorAll("[data-price-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.priceMode === priceMode);
     });
   }
 
   if (els.periodQueryBar) {
-    els.periodQueryBar.hidden = !(activeTab === "all" && activeView === "price" && priceMode === "period");
+    els.periodQueryBar.hidden = !(activeTab === "all" && activeView === "catalog" && priceMode === "period");
   }
 
   if (els.changeFilterBar) {
@@ -558,7 +560,7 @@ function renderRow(item, rowNumber = 0) {
 }
 
 function getVisibleColumns() {
-  const viewKey = activeTab === "watch" ? "watch" : activeView === "price" ? priceMode : activeView;
+  const viewKey = activeTab === "watch" ? "watch" : activeView === "catalog" ? priceMode : activeView;
   let keys = VIEW_COLUMNS[viewKey] || VIEW_COLUMNS.all;
   if (activeTab !== "import" && !keys.includes("select")) keys = ["select", ...keys];
   return keys.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean);
@@ -706,9 +708,9 @@ function updatePriceSettingField(item, rowId, field, value) {
     row = createEmptyPriceSetting(rowId);
     rows.push(row);
   }
-  if (!["oldPrice", "newPrice", "date", "soldQty", "memo"].includes(field)) return;
+  if (!["oldPrice", "newPrice", "date"].includes(field)) return;
   const before = formatPriceSettingForHistory(row);
-  row[field] = ["oldPrice", "newPrice", "soldQty"].includes(field) ? cleanNumberText(value) : String(value || "").trim();
+  row[field] = ["oldPrice", "newPrice"].includes(field) ? cleanNumberText(value) : String(value || "").trim();
   item.priceSettings = rows.filter(hasPriceSettingContent);
   recordItemEdit(item, "가격설정", before, formatPriceSettingForHistory(row));
 }
@@ -734,7 +736,7 @@ function updateSalesLinkField(item, linkId, field, value) {
     link = createEmptySalesLink(linkId);
     links.push(link);
   }
-  if (!["platform", "productName", "qty", "url"].includes(field)) return;
+  if (!["productName", "qty", "url"].includes(field)) return;
   const before = formatSalesLinkForHistory(link);
   link[field] = field === "qty" ? String(value || "").replace(/[^\d.-]/g, "").trim() : String(value || "").trim();
   item.salesLinks = links.filter(hasSalesLinkContent);
@@ -763,7 +765,6 @@ function renderSalesLinksCell(item) {
   return `
     <td class="sales-links-cell">
       <div class="sales-link-head" aria-hidden="true">
-        <span>플랫폼</span>
         <span>판매상품명</span>
         <span>수량</span>
         <span>상품페이지링크</span>
@@ -781,7 +782,6 @@ function renderSalesLinkRow(item, link) {
   const isSaved = Boolean(link.id && normalizeSalesLinks(item.salesLinks, true).some((entry) => entry.id === link.id));
   return `
     <div class="sales-link-row">
-      <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="platform" value="${escapeHtml(link.platform)}" placeholder="오늘의집" />
       <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="productName" value="${escapeHtml(link.productName)}" placeholder="" />
       <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="qty" value="${escapeHtml(link.qty)}" placeholder="수량" inputmode="numeric" />
       <input data-sales-link-input data-code="${escapeHtml(item.code)}" data-link-id="${escapeHtml(link.id)}" data-field="url" value="${escapeHtml(link.url)}" placeholder="https://..." />
@@ -799,8 +799,6 @@ function renderPriceSettingsCell(item) {
         <span>기존가격</span>
         <span>조정가격</span>
         <span>가격설정일</span>
-        <span>판매량</span>
-        <span>메모</span>
         <span></span>
       </div>
       <div class="price-tracking-list">
@@ -818,8 +816,6 @@ function renderPriceSettingRow(item, entry) {
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="oldPrice" value="${escapeHtml(entry.oldPrice)}" placeholder="" inputmode="numeric" />
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="newPrice" value="${escapeHtml(entry.newPrice)}" placeholder="" inputmode="numeric" />
       <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="date" value="${escapeHtml(entry.date)}" placeholder="" />
-      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="soldQty" value="${escapeHtml(entry.soldQty)}" placeholder="" inputmode="numeric" />
-      <input data-price-input data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" data-field="memo" value="${escapeHtml(entry.memo)}" placeholder="" />
       <button class="price-tracking-delete" data-price-delete data-code="${escapeHtml(item.code)}" data-price-id="${escapeHtml(entry.id)}" type="button" ${isSaved ? "" : "disabled"}>삭제</button>
     </div>
   `;
@@ -1395,17 +1391,11 @@ function sortBySelectedMode(a, b, sortMode) {
     processingDesc: () => b.processingStock - a.processingStock,
     availableAsc: () => a.availableStock - b.availableStock,
     availableDesc: () => b.availableStock - a.availableStock,
-    priceSoldAsc: () => getPriceSoldQty(a) - getPriceSoldQty(b),
-    priceSoldDesc: () => getPriceSoldQty(b) - getPriceSoldQty(a),
     periodSoldAsc: () => getPeriodSalesStats(a, getPeriodQueryRange(a)).soldQty - getPeriodSalesStats(b, getPeriodQueryRange(b)).soldQty,
     periodSoldDesc: () => getPeriodSalesStats(b, getPeriodQueryRange(b)).soldQty - getPeriodSalesStats(a, getPeriodQueryRange(a)).soldQty,
   };
   const sorter = sorters[sortMode];
   return sorter ? sorter() : 0;
-}
-
-function getPriceSoldQty(item) {
-  return normalizePriceSettings(item.priceSettings).reduce((total, entry) => total + toInteger(entry.soldQty, 0), 0);
 }
 
 function getMainGroupCode(item) {
@@ -1439,6 +1429,7 @@ function matchesActiveTab(item) {
     if (item.autoZeroHidden) return false;
     return isApprovedSimpleItem(item);
   }
+  if (activeTab === "watch") return isHoldNeededItem(item);
   if (item.autoZeroHidden) return false;
   if (activeTab === "allStockChanges") return matchesChangeFilter(item);
   if (activeTab === "negative") return isNegativeTabItem(item);
@@ -1629,14 +1620,16 @@ function setChangeFilter(filter) {
 function setView(view) {
   activeTab = "all";
   showAutoHiddenInAll = false;
+  const previousView = activeView;
   activeView = VIEW_COLUMNS[view] ? view : "all";
-  if (activeView === "price" && !["priceDate", "period"].includes(priceMode)) priceMode = "priceDate";
+  if (activeView === "catalog" && previousView !== "catalog") priceMode = "links";
+  if (activeView === "catalog" && !["links", "priceDate", "period", "depletion"].includes(priceMode)) priceMode = "links";
   currentPage = 1;
   render();
 }
 
 function setPriceMode(mode) {
-  priceMode = mode === "period" ? "period" : "priceDate";
+  priceMode = ["links", "priceDate", "period", "depletion"].includes(mode) ? mode : "links";
   currentPage = 1;
   render();
 }
@@ -1751,7 +1744,7 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
     }
 
     const importedName = map.name ? String(record[map.name] || "").trim() : "";
-    if (importedName.includes("?ㅽ겕?섏튂")) {
+    if (isScratchLimitedItemName(importedName)) {
       skipped += 1;
       return;
     }
@@ -1856,11 +1849,15 @@ function hideMissingInventoryItems(importedCodes) {
 }
 
 function isVisibleInventoryItem(item) {
-  return !item.hiddenFromInventory;
+  return !item.hiddenFromInventory && !isScratchLimitedItemName(item.name);
 }
 
 function isNormallyVisibleInventoryItem(item) {
-  return !item.hiddenFromInventory && !item.autoZeroHidden;
+  return !item.hiddenFromInventory && !item.autoZeroHidden && !isScratchLimitedItemName(item.name);
+}
+
+function isScratchLimitedItemName(name) {
+  return String(name || "").includes("스크래치");
 }
 
 function shouldAutoHideZeroStock(stock, processingStock) {
@@ -2489,14 +2486,13 @@ function createEmptyPriceSetting(id = createId()) {
 }
 
 function hasPriceSettingContent(entry) {
-  return Boolean(entry && (entry.oldPrice || entry.newPrice || entry.date || entry.soldQty || entry.memo));
+  return Boolean(entry && (entry.oldPrice || entry.newPrice || entry.date));
 }
 
 function formatPriceSettingForHistory(entry) {
   if (!entry) return "";
   const priceText = entry.oldPrice || entry.newPrice ? `${entry.oldPrice || "-"} -> ${entry.newPrice || "-"}` : "";
-  const qtyText = entry.soldQty ? `${entry.soldQty}개 판매` : "";
-  return [priceText, entry.date, qtyText, entry.memo].filter(Boolean).join(" / ");
+  return [priceText, entry.date].filter(Boolean).join(" / ");
 }
 
 function normalizePeriodSales(value, keepEmpty = false) {
@@ -2681,12 +2677,12 @@ function createEmptySalesLink(id = createId()) {
 }
 
 function hasSalesLinkContent(link) {
-  return Boolean(link && (link.platform || link.productName || link.qty || link.url));
+  return Boolean(link && (link.productName || link.qty || link.url));
 }
 
 function formatSalesLinkForHistory(link) {
   if (!link) return "";
-  return [link.platform, link.productName, link.qty ? `${link.qty}개` : "", link.url].filter(Boolean).join(" / ");
+  return [link.productName, link.qty ? `${link.qty}개` : "", link.url].filter(Boolean).join(" / ");
 }
 
 function formatSalesLinksSearch(links) {
