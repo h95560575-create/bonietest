@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=fix-korean-text-20260805" />
+    <link rel="stylesheet" href="styles.css?v=link-edit-mode-20260930" />
   </head>
   <body>
     <div class="app-shell">
@@ -26,25 +26,25 @@
 
       <main class="workspace">
         <section class="summary-grid" aria-label="재고 요약">
-          <button class="metric" data-jump-tab="all" type="button">
+          <div class="metric">
             <span>전체 상품</span>
             <strong id="totalCount">0</strong>
-          </button>
-          <button class="metric danger" data-jump-tab="negative" type="button">
+          </div>
+          <div class="metric danger">
             <span>마이너스</span>
             <strong id="negativeCount">0</strong>
-          </button>
-          <button class="metric warning" data-jump-tab="allStockChanges" type="button">
+          </div>
+          <div class="metric warning">
             <span>변동내역</span>
             <strong id="watchCount">0</strong>
-          </button>
+          </div>
         </section>
 
         <section class="control-bar">
           <nav class="tabs" aria-label="재고 보기">
             <button class="tab" data-tab="watch" type="button">보류필요</button>
+            <button class="tab" data-tab="limited" type="button">한정수량</button>
             <button class="tab" data-tab="allStockChanges" type="button">변동내역</button>
-            <button class="tab" data-tab="negative" type="button">마이너스</button>
             <button class="tab" data-tab="import" type="button">파일등록</button>
           </nav>
           <div class="filters">
@@ -91,6 +91,7 @@
               <button class="price-mode-button" data-price-mode="priceDate" type="button">가격설정 기준</button>
               <button class="price-mode-button" data-price-mode="period" type="button">기간 판매 조회</button>
               <button class="price-mode-button" data-price-mode="depletion" type="button">소진예상일</button>
+              <button class="price-mode-button" data-price-mode="stagnant" type="button">장기무변동</button>
             </div>
             <div class="period-query-bar" id="periodQueryBar" hidden>
               <label>시작일 <input id="periodStartInput" type="date" /></label>
@@ -227,6 +228,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=fix-korean-text-20260805"></script>
+    <script src="app.js?v=link-edit-mode-20260930"></script>
   </body>
 </html>

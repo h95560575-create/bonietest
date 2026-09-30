@@ -3,6 +3,7 @@ const AUTHOR_KEY = "jaesodanInventory.author";
 const LOGIN_KEY = "jaesodanInventory.loginUser";
 const API_STATE_URL = "/api/state";
 const PAGE_SIZE = 50;
+const STAGNANT_STOCK_DAYS = 30;
 
 const COLUMNS = [
   { key: "select", label: "선택" },
@@ -30,6 +31,8 @@ const COLUMNS = [
   { key: "salesLinks", label: "판매링크" },
   { key: "priceSettings", label: "가격설정 기준" },
   { key: "periodSales", label: "기간 판매 조회" },
+  { key: "stagnantSince", label: "마지막 변동" },
+  { key: "stagnantDays", label: "무변동기간" },
   { key: "note", label: "메모" },
   { key: "history", label: "기록" },
   { key: "updatedAt", label: "수정일" },
@@ -43,7 +46,9 @@ const VIEW_COLUMNS = {
   depletion: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "depletionEstimate", "depletionRate", "depletionDate", "updatedAt"],
   priceDate: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "priceSettings", "updatedAt", "history"],
   period: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
+  stagnant: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "stagnantSince", "stagnantDays", "updatedAt", "history"],
   changes: ["select", "sequence", "status", "code", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
+  limited: ["select", "sequence", "status", "code", "name", "stock", "processingStock", "availableStock", "updatedAt", "history"],
   watch: ["sequence", "status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   all: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
@@ -102,6 +107,7 @@ let lastLocalChangeAt = 0;
 let currentUser = null;
 let showAutoHiddenInAll = false;
 const selectedItemCodes = new Set();
+const editingSalesLinkCodes = new Set();
 
 const els = {
   authorInput: document.getElementById("authorInput"),
@@ -165,10 +171,6 @@ const els = {
 
 document.querySelectorAll("[data-tab]").forEach((button) => {
   button.addEventListener("click", () => setTab(button.dataset.tab));
-});
-
-document.querySelectorAll("[data-jump-tab]").forEach((button) => {
-  button.addEventListener("click", () => setTab(button.dataset.jumpTab));
 });
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -452,8 +454,8 @@ function render() {
     .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }));
   const items = visibleItems.filter((item) => !item.autoZeroHidden);
   const total = items.length;
-  const negative = visibleItems.filter(isNegativeTabItem).length;
-  const watch = visibleItems.filter(isHoldNeededItem).length;
+  const negative = visibleItems.filter(isActualNegativeItem).length;
+  const watch = visibleItems.filter(hasAnyStockChange).length;
 
   els.totalCount.textContent = formatNumber(total);
   els.negativeCount.textContent = formatNumber(negative);
@@ -560,7 +562,7 @@ function renderRow(item, rowNumber = 0) {
 }
 
 function getVisibleColumns() {
-  const viewKey = activeTab === "watch" ? "watch" : activeView === "catalog" ? priceMode : activeView;
+  const viewKey = activeTab !== "all" && VIEW_COLUMNS[activeTab] ? activeTab : activeView === "catalog" ? priceMode : activeView;
   let keys = VIEW_COLUMNS[viewKey] || VIEW_COLUMNS.all;
   if (activeTab !== "import" && !keys.includes("select")) keys = ["select", ...keys];
   return keys.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean);
@@ -600,7 +602,7 @@ function getColumnHeaderClass(key) {
   if (key === "inboundQty") return "center-head inbound-qty-head";
   if (["stock", "processingStock", "availableStock", "inboundQty", "orderQty"].includes(key)) return "number-head";
   if (["status", "parentCode", "mainCode", "simpleStatus", "history"].includes(key)) return "center-head";
-  if (["inboundDate", "updatedAt", "depletionDate"].includes(key)) return "date-head";
+  if (["inboundDate", "updatedAt", "depletionDate", "stagnantSince"].includes(key)) return "date-head";
   if (key === "codeChange" || key === "mainCode") return "code-change-head";
   if (key === "code") return "code-head";
   return "";
@@ -640,6 +642,8 @@ function renderCell(item, column, rowNumber = 0) {
   if (column.key === "salesLinks") return renderSalesLinksCell(item);
   if (column.key === "priceSettings") return renderPriceSettingsCell(item);
   if (column.key === "periodSales") return renderPeriodSalesCell(item);
+  if (column.key === "stagnantSince") return renderStagnantSinceCell(item);
+  if (column.key === "stagnantDays") return renderStagnantDaysCell(item);
   if (column.key === "note") {
     return `
       <td class="note-cell">
@@ -761,7 +765,22 @@ function renderMainCodeCell(item) {
 
 function renderSalesLinksCell(item) {
   const links = normalizeSalesLinks(item.salesLinks, true);
+  const isEditing = editingSalesLinkCodes.has(item.code);
   const rows = links.length ? links : [createEmptySalesLink()];
+  if (!isEditing) {
+    return `
+      <td class="sales-links-cell">
+        <div class="sales-link-view-list">
+          ${
+            links.length
+              ? links.map((link) => renderSalesLinkViewRow(item, link)).join("")
+              : `<span class="sales-link-empty">등록된 판매링크 없음</span>`
+          }
+        </div>
+        <button class="sales-link-edit" data-sales-link-edit data-code="${escapeHtml(item.code)}" type="button">수정</button>
+      </td>
+    `;
+  }
   return `
     <td class="sales-links-cell">
       <div class="sales-link-head" aria-hidden="true">
@@ -773,8 +792,28 @@ function renderSalesLinksCell(item) {
       <div class="sales-link-list">
         ${rows.map((link) => renderSalesLinkRow(item, link)).join("")}
       </div>
-      <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">판매링크 추가</button>
+      <div class="sales-link-actions">
+        <button class="sales-link-add" data-sales-link-add data-code="${escapeHtml(item.code)}" type="button">판매링크 추가</button>
+        <button class="sales-link-save" data-sales-link-save data-code="${escapeHtml(item.code)}" type="button">저장</button>
+      </div>
     </td>
+  `;
+}
+
+function renderSalesLinkViewRow(item, link) {
+  const safeUrl = normalizeExternalUrl(link.url);
+  const name = link.productName || "판매상품명 없음";
+  const qty = link.qty ? `${formatNumber(link.qty)}개` : "수량 미입력";
+  const linkText = safeUrl ? "상품페이지 열기" : "링크 미입력";
+  const linkHtml = safeUrl
+    ? `<a class="sales-link-open" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${linkText}</a>`
+    : `<span class="sales-link-missing">${linkText}</span>`;
+  return `
+    <div class="sales-link-view-row">
+      <strong>${escapeHtml(name)}</strong>
+      <span>${escapeHtml(qty)}</span>
+      ${linkHtml}
+    </div>
   `;
 }
 
@@ -855,7 +894,33 @@ function renderPeriodSaleRow(item, entry) {
   `;
 }
 
+function renderStagnantSinceCell(item) {
+  return `<td class="date-cell">${escapeHtml(formatDate(getLastStockMovementAt(item)))}</td>`;
+}
+
+function renderStagnantDaysCell(item) {
+  const days = getStagnantStockDays(item);
+  return `<td class="stagnant-days-cell">${Number.isFinite(days) ? `${formatNumber(days)}일` : "-"}</td>`;
+}
+
 function handleTableClick(event) {
+  const editSalesLinkButton = event.target.closest("[data-sales-link-edit]");
+  if (editSalesLinkButton) {
+    if (!requireLogin("manageLinks")) return;
+    editingSalesLinkCodes.add(editSalesLinkButton.dataset.code);
+    render();
+    return;
+  }
+
+  const saveSalesLinkButton = event.target.closest("[data-sales-link-save]");
+  if (saveSalesLinkButton) {
+    if (!requireLogin("manageLinks")) return;
+    editingSalesLinkCodes.delete(saveSalesLinkButton.dataset.code);
+    persist();
+    render();
+    return;
+  }
+
   const historyButton = event.target.closest("[data-history-open]");
   if (historyButton) {
     const item = findItemByCode(historyButton.dataset.code);
@@ -924,9 +989,10 @@ function handleTableClick(event) {
     if (!requireLogin("manageLinks")) return;
     const item = findItemByCode(addSalesLinkButton.dataset.code);
     if (!item) return;
+    editingSalesLinkCodes.add(item.code);
     item.salesLinks = [...normalizeSalesLinks(item.salesLinks, true), createEmptySalesLink()];
     item.updatedAt = new Date().toISOString();
-    recordItemEdit(item, "가격설정", "", "가격기록 추가");
+    recordItemEdit(item, "판매링크", "", "판매링크 추가");
     persist();
     render();
     return;
@@ -939,6 +1005,7 @@ function handleTableClick(event) {
     if (!item) return;
     const links = normalizeSalesLinks(item.salesLinks, true);
     const removed = links.find((entry) => entry.id === deleteSalesLinkButton.dataset.linkId);
+    editingSalesLinkCodes.add(item.code);
     item.salesLinks = links.filter((entry) => entry.id !== deleteSalesLinkButton.dataset.linkId);
     item.updatedAt = new Date().toISOString();
     recordItemEdit(item, "판매링크", formatSalesLinkForHistory(removed), "삭제");
@@ -1165,7 +1232,7 @@ function updateLoginLockedControls() {
   setControlLock(els.inventoryImportBtn, locked || !hasPermission("uploadInventory"), "재고목록 등록 권한이 필요합니다.");
   setControlLock(els.orderImportBtn, locked || !hasPermission("uploadInventory"), "주문서 등록 권한이 필요합니다.");
   setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
-  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete], [data-price-input], [data-price-add], [data-price-delete], [data-period-input], [data-period-add], [data-period-delete]").forEach((control) => {
+  document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete], [data-sales-link-edit], [data-sales-link-save], [data-price-input], [data-price-add], [data-price-delete], [data-period-input], [data-period-add], [data-period-delete]").forEach((control) => {
     setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드, 메인코드, 판매링크 수정 권한이 필요합니다.");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
@@ -1430,17 +1497,18 @@ function matchesActiveTab(item) {
     return isApprovedSimpleItem(item);
   }
   if (activeTab === "watch") return isHoldNeededItem(item);
+  if (activeTab === "limited") return isLimitedQuantityItem(item);
   if (item.autoZeroHidden) return false;
   if (activeTab === "allStockChanges") return matchesChangeFilter(item);
-  if (activeTab === "negative") return isNegativeTabItem(item);
+  if (activeTab === "negative") return isActualNegativeItem(item);
   return item.status.key === activeTab;
 }
 
 function matchesChangeFilter(item) {
+  if (changeFilter === "negative") return isActualNegativeItem(item);
   if (!hasAnyStockChange(item)) return false;
   if (changeFilter === "down") return hasDecreaseChange(item);
   if (changeFilter === "up") return hasIncreaseChange(item);
-  if (changeFilter === "negative") return item.availableStock < 0;
   if (changeFilter === "hold") return hasHoldStockMovement(item);
   return true;
 }
@@ -1471,6 +1539,37 @@ function isNegativeTabItem(item) {
   return item.status.key === "negative" || hasHoldStockMovement(item);
 }
 
+function isActualNegativeItem(item) {
+  return item.availableStock < 0;
+}
+
+function isLimitedQuantityItem(item) {
+  const name = String(item.name || "");
+  return name.includes("한정수량") && !isScratchLimitedItemName(name);
+}
+
+function isStagnantStockItem(item) {
+  if (item.parentCode || item.autoZeroHidden) return false;
+  if (!isApprovedSimpleItem(item)) return false;
+  const days = getStagnantStockDays(item);
+  return Number.isFinite(days) && days >= STAGNANT_STOCK_DAYS;
+}
+
+function getStagnantStockDays(item) {
+  const lastMovementAt = parseDateValue(getLastStockMovementAt(item));
+  if (!lastMovementAt) return NaN;
+  const today = getTodayEndDate();
+  return Math.max(0, Math.floor((today - lastMovementAt) / 86400000));
+}
+
+function getLastStockMovementAt(item) {
+  const logs = normalizeStockLogs(item.stockLogs)
+    .map((entry) => entry.at)
+    .filter(Boolean)
+    .sort((a, b) => parseDateValue(b) - parseDateValue(a));
+  return logs[0] || item.stockChangedAt || item.createdAt || item.updatedAt || "";
+}
+
 function hasHoldStockMovement(item) {
   if (item.parentCode || !isHoldSimpleItem(item)) return false;
   const availableStock = item.stock - item.processingStock;
@@ -1483,6 +1582,7 @@ function hasHoldStockMovement(item) {
 function shouldShowNewAlertDot(item) {
   if (item.parentCode) return false;
   if (activeTab === "negative") return isNewNegativeItem(item);
+  if (activeTab === "allStockChanges" && changeFilter === "negative") return isNewNegativeItem(item);
   if (activeTab === "watch") return isNewWatchItem(item);
   return false;
 }
@@ -1623,13 +1723,13 @@ function setView(view) {
   const previousView = activeView;
   activeView = VIEW_COLUMNS[view] ? view : "all";
   if (activeView === "catalog" && previousView !== "catalog") priceMode = "links";
-  if (activeView === "catalog" && !["links", "priceDate", "period", "depletion"].includes(priceMode)) priceMode = "links";
+  if (activeView === "catalog" && !["links", "priceDate", "period", "depletion", "stagnant"].includes(priceMode)) priceMode = "links";
   currentPage = 1;
   render();
 }
 
 function setPriceMode(mode) {
-  priceMode = ["links", "priceDate", "period", "depletion"].includes(mode) ? mode : "links";
+  priceMode = ["links", "priceDate", "period", "depletion", "stagnant"].includes(mode) ? mode : "links";
   currentPage = 1;
   render();
 }
@@ -1857,7 +1957,8 @@ function isNormallyVisibleInventoryItem(item) {
 }
 
 function isScratchLimitedItemName(name) {
-  return String(name || "").includes("스크래치");
+  const text = String(name || "");
+  return text.includes("스크래치") || (text.includes("한정수량") && text.includes("래치"));
 }
 
 function shouldAutoHideZeroStock(stock, processingStock) {
@@ -2245,6 +2346,7 @@ function getCurrentVisibleRows() {
     .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }))
     .filter((item) => {
       if (!matchesActiveTab(item)) return false;
+      if (activeTab === "all" && activeView === "catalog" && priceMode === "stagnant" && !isStagnantStockItem(item)) return false;
       if (!query) return true;
       return normalizeSearch(`${item.code} ${item.codeChange} ${item.name} ${item.note} ${formatSalesLinksSearch(item.salesLinks)} ${formatPriceTrackingSearch(item)}`).includes(query);
     })
@@ -2747,6 +2849,18 @@ function formatDate(value) {
 function formatTime(value) {
   const date = new Date(value);
   return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function normalizeExternalUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const withProtocol = /^https?:\/\//i.test(text) ? text : `https://${text}`;
+  try {
+    const url = new URL(withProtocol);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 function escapeHtml(value) {

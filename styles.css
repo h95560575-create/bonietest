@@ -162,6 +162,8 @@ h1 {
 .sales-link-row input:disabled,
 .sales-link-add:disabled,
 .sales-link-delete:disabled,
+.sales-link-edit:disabled,
+.sales-link-save:disabled,
 .note-cell textarea:disabled,
 .parent-code-button:disabled {
   cursor: not-allowed;
@@ -706,6 +708,16 @@ tbody tr:hover td {
   white-space: nowrap;
 }
 
+.stagnant-days-cell {
+  min-width: 104px;
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .depletion-danger,
 .depletion-danger strong,
 .depletion-danger.depletion-rate-cell,
@@ -773,6 +785,61 @@ tbody tr:hover td {
   gap: 6px;
 }
 
+.sales-link-view-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sales-link-view-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) 86px minmax(132px, auto);
+  gap: 10px;
+  align-items: center;
+  min-height: 36px;
+  border-radius: 8px;
+  background: #f7f9fb;
+  padding: 8px 10px;
+}
+
+.sales-link-view-row strong,
+.sales-link-view-row span,
+.sales-link-view-row a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-link-view-row strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sales-link-view-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sales-link-open {
+  color: var(--blue-strong);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.sales-link-open:hover {
+  text-decoration: underline;
+}
+
+.sales-link-missing,
+.sales-link-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .sales-link-row input {
   width: 100%;
   min-width: 0;
@@ -795,7 +862,9 @@ tbody tr:hover td {
 }
 
 .sales-link-add,
-.sales-link-delete {
+.sales-link-delete,
+.sales-link-edit,
+.sales-link-save {
   min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -806,9 +875,27 @@ tbody tr:hover td {
   cursor: pointer;
 }
 
-.sales-link-add {
+.sales-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 8px;
+}
+
+.sales-link-add {
   padding: 0 10px;
+}
+
+.sales-link-edit {
+  margin-top: 8px;
+  padding: 0 14px;
+}
+
+.sales-link-save {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+  padding: 0 14px;
 }
 
 .sales-link-delete {
