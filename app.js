@@ -48,7 +48,6 @@ const VIEW_COLUMNS = {
   period: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "periodSales", "updatedAt", "history"],
   stagnant: ["sequence", "code", "name", "stock", "processingStock", "availableStock", "stagnantSince", "stagnantDays", "updatedAt", "history"],
   changes: ["select", "sequence", "status", "code", "name", "stockChangeDetail", "processingStockChangeDetail", "availableStockChangeDetail", "updatedAt", "history"],
-  limited: ["select", "sequence", "status", "code", "name", "stock", "processingStock", "availableStock", "updatedAt", "history"],
   watch: ["sequence", "status", "code", "codeChange", "parentCode", "simpleStatus", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "history"],
   all: ["select", "sequence", "code", "name", "stock", "processingStock", "availableStock", "inboundDate", "inboundQty", "updatedAt", "note", "history"],
 };
@@ -98,6 +97,7 @@ let activeTab = "all";
 let activeView = "all";
 let priceMode = "links";
 let changeFilter = "all";
+let itemTypeFilter = "jaesodan";
 let currentPage = 1;
 let serverSyncEnabled = false;
 let saveDebounceId = null;
@@ -132,6 +132,7 @@ const els = {
   selectedDownloadBtn: document.getElementById("selectedDownloadBtn"),
   panelToolbar: document.querySelector(".panel-toolbar"),
   priceModeBar: document.getElementById("priceModeBar"),
+  itemTypeFilterBar: document.getElementById("itemTypeFilterBar"),
   periodQueryBar: document.getElementById("periodQueryBar"),
   periodStartInput: document.getElementById("periodStartInput"),
   periodEndInput: document.getElementById("periodEndInput"),
@@ -185,11 +186,20 @@ document.querySelectorAll("[data-change-filter]").forEach((button) => {
   button.addEventListener("click", () => setChangeFilter(button.dataset.changeFilter));
 });
 
+document.querySelectorAll("[data-item-type-filter]").forEach((button) => {
+  button.addEventListener("click", () => setItemTypeFilter(button.dataset.itemTypeFilter));
+});
+
 if (els.panelToolbar) {
   els.panelToolbar.addEventListener("click", (event) => {
     const button = event.target.closest("[data-change-filter]");
-    if (!button) return;
-    setChangeFilter(button.dataset.changeFilter);
+    if (button) {
+      setChangeFilter(button.dataset.changeFilter);
+      return;
+    }
+    const itemTypeButton = event.target.closest("[data-item-type-filter]");
+    if (!itemTypeButton) return;
+    setItemTypeFilter(itemTypeButton.dataset.itemTypeFilter);
   });
 }
 
@@ -484,6 +494,13 @@ function render() {
     els.changeFilterBar.hidden = activeTab !== "allStockChanges";
     document.querySelectorAll("[data-change-filter]").forEach((button) => {
       button.classList.toggle("active", button.dataset.changeFilter === changeFilter);
+    });
+  }
+
+  if (els.itemTypeFilterBar) {
+    els.itemTypeFilterBar.hidden = !(activeTab === "all" && activeView === "all");
+    document.querySelectorAll("[data-item-type-filter]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.itemTypeFilter === itemTypeFilter);
     });
   }
 
@@ -1405,6 +1422,9 @@ function getStatus(item) {
   if (item.parentCode) {
     return { key: "parent", label: "메인코드", className: "status-parent" };
   }
+  if (hasAvailableRestockedFromZero(item)) {
+    return { key: "restocked", label: "재고생김", className: "status-restocked" };
+  }
   if (item.availableStock < 0) {
     return { key: "negative", label: "마이너스", className: "status-soldout" };
   }
@@ -1421,7 +1441,7 @@ function getStatus(item) {
 }
 
 function sortItems(a, b) {
-  const rank = { negative: 1, watch: 2, stockChange: 3, parent: 5, ok: 6 };
+  const rank = { restocked: 1, negative: 2, watch: 3, stockChange: 4, parent: 6, ok: 7 };
   const simpleStatusSort = getSimpleStatusRank(a) - getSimpleStatusRank(b);
   const groupSort =
     getMainGroupOrder(a) - getMainGroupOrder(b) ||
@@ -1431,11 +1451,17 @@ function sortItems(a, b) {
     a.code.localeCompare(b.code, "ko", { numeric: true });
   const sortMode = els.sortSelect ? els.sortSelect.value : "default";
   const directSort = sortBySelectedMode(a, b, sortMode);
-  if (directSort) return directSort;
   if (activeTab === "all") return simpleStatusSort || groupSort;
   if (activeTab === "allStockChanges") {
-    return simpleStatusSort || parseDateValue(b.stockChangedAt || b.updatedAt) - parseDateValue(a.stockChangedAt || a.updatedAt) || groupSort;
+    return (
+      Number(hasAvailableRestockedFromZero(b)) - Number(hasAvailableRestockedFromZero(a)) ||
+      directSort ||
+      simpleStatusSort ||
+      parseDateValue(b.stockChangedAt || b.updatedAt) - parseDateValue(a.stockChangedAt || a.updatedAt) ||
+      groupSort
+    );
   }
+  if (directSort) return directSort;
   return (
     getUrgentRank(a) - getUrgentRank(b) ||
     simpleStatusSort ||
@@ -1494,10 +1520,10 @@ function matchesActiveTab(item) {
   if (activeTab === "all") {
     if (showAutoHiddenInAll) return Boolean(item.autoZeroHidden);
     if (item.autoZeroHidden) return false;
-    return isApprovedSimpleItem(item);
+    if (!isApprovedSimpleItem(item)) return false;
+    return matchesItemTypeFilter(item);
   }
   if (activeTab === "watch") return isHoldNeededItem(item);
-  if (activeTab === "limited") return isLimitedQuantityItem(item);
   if (item.autoZeroHidden) return false;
   if (activeTab === "allStockChanges") return matchesChangeFilter(item);
   if (activeTab === "negative") return isActualNegativeItem(item);
@@ -1527,6 +1553,11 @@ function hasIncreaseChange(item) {
   });
 }
 
+function hasAvailableRestockedFromZero(item) {
+  const pair = getStockChangePair(item, "availableStock");
+  return Boolean(pair && pair.previous === 0 && pair.current > 0);
+}
+
 function isApprovedSimpleItem(item) {
   return normalizeSimpleStatus(item.simpleStatus) === "승인";
 }
@@ -1546,6 +1577,17 @@ function isActualNegativeItem(item) {
 function isLimitedQuantityItem(item) {
   const name = String(item.name || "");
   return name.includes("한정수량") && !isScratchLimitedItemName(name);
+}
+
+function isJaesodanItem(item) {
+  const name = String(item.name || "");
+  return name.includes("재소단") && !isLimitedQuantityItem(item);
+}
+
+function matchesItemTypeFilter(item) {
+  if (activeView !== "all") return true;
+  if (itemTypeFilter === "limited") return isLimitedQuantityItem(item);
+  return isJaesodanItem(item);
 }
 
 function isStagnantStockItem(item) {
@@ -1713,6 +1755,15 @@ function setChangeFilter(filter) {
   activeTab = "allStockChanges";
   activeView = "changes";
   changeFilter = ["all", "down", "up", "negative", "hold"].includes(filter) ? filter : "all";
+  currentPage = 1;
+  render();
+}
+
+function setItemTypeFilter(filter) {
+  activeTab = "all";
+  activeView = "all";
+  showAutoHiddenInAll = false;
+  itemTypeFilter = filter === "limited" ? "limited" : "jaesodan";
   currentPage = 1;
   render();
 }

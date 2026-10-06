@@ -965,6 +965,11 @@ tbody tr:hover td {
   color: var(--blue-strong);
 }
 
+.status-restocked {
+  background: #e9f9ef;
+  color: #16803a;
+}
+
 .status-low3 {
   background: #fff3bf;
   color: #8a5a00;
@@ -1227,6 +1232,16 @@ tr.row-watch td {
 
 tr.row-stockChange td {
   background: #f5fbff;
+}
+
+tr.row-restocked td {
+  background: #f0fff5;
+  border-bottom-color: #c8f2d6;
+}
+
+tr.row-restocked .change-up,
+tr.row-restocked .status-restocked {
+  color: #16803a;
 }
 
 tr.row-low3 td {
@@ -1612,6 +1627,13 @@ tr.row-low5 td {
   margin-left: auto;
 }
 
+.item-type-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .change-filter-button {
   min-height: 36px;
   padding: 0 12px;
@@ -1624,7 +1646,20 @@ tr.row-low5 td {
   cursor: pointer;
 }
 
-.change-filter-button.active {
+.item-type-filter-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.change-filter-button.active,
+.item-type-filter-button.active {
   border-color: rgba(25, 167, 245, 0.28);
   background: rgba(25, 167, 245, 0.1);
   color: var(--blue-strong);

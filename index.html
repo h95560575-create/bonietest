@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>재고 소진 단종품 재고 확인</title>
-    <link rel="stylesheet" href="styles.css?v=link-edit-mode-20260930" />
+    <link rel="stylesheet" href="styles.css?v=restocked-highlight-20261006" />
   </head>
   <body>
     <div class="app-shell">
@@ -43,7 +43,6 @@
         <section class="control-bar">
           <nav class="tabs" aria-label="재고 보기">
             <button class="tab" data-tab="watch" type="button">보류필요</button>
-            <button class="tab" data-tab="limited" type="button">한정수량</button>
             <button class="tab" data-tab="allStockChanges" type="button">변동내역</button>
             <button class="tab" data-tab="import" type="button">파일등록</button>
           </nav>
@@ -103,6 +102,10 @@
               <button class="change-filter-button" data-change-filter="up" type="button">증가만</button>
               <button class="change-filter-button" data-change-filter="negative" type="button">마이너스만</button>
               <button class="change-filter-button" data-change-filter="hold" type="button">보류 변동만</button>
+            </div>
+            <div class="item-type-filter-bar" id="itemTypeFilterBar" hidden>
+              <button class="item-type-filter-button active" data-item-type-filter="jaesodan" type="button">재소단</button>
+              <button class="item-type-filter-button" data-item-type-filter="limited" type="button">한정수량</button>
             </div>
             <div class="selection-action-bar">
               <button class="button subtle auto-hidden-toggle" id="autoHiddenToggleBtn" type="button" hidden>자동숨김 보기</button>
@@ -228,6 +231,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=link-edit-mode-20260930"></script>
+    <script src="app.js?v=restocked-highlight-20261006"></script>
   </body>
 </html>
