@@ -1451,7 +1451,7 @@ function sortItems(a, b) {
     a.code.localeCompare(b.code, "ko", { numeric: true });
   const sortMode = els.sortSelect ? els.sortSelect.value : "default";
   const directSort = sortBySelectedMode(a, b, sortMode);
-  if (activeTab === "all") return simpleStatusSort || groupSort;
+  if (activeTab === "all") return directSort || simpleStatusSort || groupSort;
   if (activeTab === "allStockChanges") {
     return (
       Number(hasAvailableRestockedFromZero(b)) - Number(hasAvailableRestockedFromZero(a)) ||
