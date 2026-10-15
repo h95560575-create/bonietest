@@ -630,6 +630,47 @@ tbody tr:hover td {
   display: inline-block;
 }
 
+.remaining-after-inbound {
+  display: block;
+  margin-top: 4px;
+  color: #16803a;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.editable-schedule-cell input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #f7f9fb;
+  color: var(--blue-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  outline: none;
+  padding: 7px 6px;
+  text-align: center;
+}
+
+.editable-schedule-cell input:focus {
+  border-color: var(--blue);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(25, 167, 245, 0.14);
+}
+
+.editable-schedule-cell input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.inbound-qty-cell input {
+  color: var(--ink);
+}
+
 .number-delta {
   display: inline-block;
   margin-left: 5px;

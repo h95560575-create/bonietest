@@ -651,10 +651,16 @@ function renderCell(item, column, rowNumber = 0) {
     if (["stock", "processingStock", "availableStock"].includes(column.key)) {
       return renderStockNumberCell(item, column.key, value);
     }
+    if (column.key === "inboundQty" && activeTab === "all" && activeView === "stock") {
+      return renderInboundQtyCell(item);
+    }
     const extraClass = column.key === "inboundQty" ? " inbound-qty-cell" : "";
     return `<td class="number-cell${extraClass}">${formatNumber(value)}</td>`;
   }
-  if (column.key === "inboundDate") return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
+  if (column.key === "inboundDate") {
+    if (activeTab === "all" && activeView === "stock") return renderInboundDateCell(item);
+    return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
+  }
   if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서 기준자료"}</td>`;
   if (column.key === "salesLinks") return renderSalesLinksCell(item);
   if (column.key === "priceSettings") return renderPriceSettingsCell(item);
@@ -688,8 +694,8 @@ function renderNameCell(item) {
 }
 
 function handleTableEdit(event) {
-  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input], [data-sales-link-input], [data-price-input], [data-period-input]")) return;
-  const permissionKey = event.target.matches("[data-note-input]") ? "editMemo" : "manageLinks";
+  if (!event.target.matches("[data-note-input], [data-code-change-input], [data-main-code-input], [data-sales-link-input], [data-price-input], [data-period-input], [data-inbound-date-input], [data-inbound-qty-input]")) return;
+  const permissionKey = event.target.matches("[data-note-input]") ? "editMemo" : event.target.matches("[data-inbound-date-input], [data-inbound-qty-input]") ? "editSchedule" : "manageLinks";
   if (!requireLogin(permissionKey)) {
     render();
     return;
@@ -706,6 +712,14 @@ function handleTableEdit(event) {
     updatePriceSettingField(item, event.target.dataset.priceId, event.target.dataset.field, event.target.value);
   } else if (event.target.matches("[data-period-input]")) {
     updatePeriodSaleField(item, event.target.dataset.periodId, event.target.dataset.field, event.target.value);
+  } else if (event.target.matches("[data-inbound-date-input]")) {
+    const nextValue = String(event.target.value || "").trim();
+    recordItemEdit(item, "입고일정", item.inboundDate, nextValue);
+    item.inboundDate = nextValue;
+  } else if (event.target.matches("[data-inbound-qty-input]")) {
+    const nextValue = toInteger(event.target.value, 0);
+    recordItemEdit(item, "입고수량", item.inboundQty, nextValue);
+    item.inboundQty = nextValue;
   } else {
     const nextValue = event.target.matches("[data-main-code-input]") ? normalizeCode(event.target.value) : event.target.value.trim();
     if (event.target.matches("[data-main-code-input]")) {
@@ -1055,7 +1069,28 @@ function renderHistoryCell(item) {
 
 function renderStockNumberCell(item, key, value) {
   const valueClass = key === "availableStock" ? item.status.className : "";
-  return `<td class="number-cell ${valueClass}">${formatNumber(value)}</td>`;
+  const inboundQty = toInteger(item.inboundQty, 0);
+  const remainingAfterInbound = value + inboundQty;
+  const inboundNote = key === "availableStock" && value < 0 && inboundQty > 0
+    ? `<span class="remaining-after-inbound">입고 후 ${formatNumber(remainingAfterInbound)}개</span>`
+    : "";
+  return `<td class="number-cell ${valueClass}"><span class="number-value">${formatNumber(value)}</span>${inboundNote}</td>`;
+}
+
+function renderInboundDateCell(item) {
+  return `
+    <td class="schedule-cell editable-schedule-cell">
+      <input data-inbound-date-input data-code="${escapeHtml(item.code)}" value="${escapeHtml(item.inboundDate || "")}" placeholder="입고일정 입력" />
+    </td>
+  `;
+}
+
+function renderInboundQtyCell(item) {
+  return `
+    <td class="number-cell inbound-qty-cell editable-schedule-cell">
+      <input data-inbound-qty-input data-code="${escapeHtml(item.code)}" value="${item.inboundQty ? escapeHtml(item.inboundQty) : ""}" placeholder="수량" inputmode="numeric" />
+    </td>
+  `;
 }
 
 function getStockDelta(item, key) {
@@ -1251,6 +1286,9 @@ function updateLoginLockedControls() {
   setControlLock(els.scheduleImportBtn, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
   document.querySelectorAll("[data-code-change-input], [data-parent-code-toggle], [data-main-code-input], [data-sales-link-input], [data-sales-link-add], [data-sales-link-delete], [data-sales-link-edit], [data-sales-link-save], [data-price-input], [data-price-add], [data-price-delete], [data-period-input], [data-period-add], [data-period-delete]").forEach((control) => {
     setControlLock(control, locked || !hasPermission("manageLinks"), "변경코드, 메인코드, 판매링크 수정 권한이 필요합니다.");
+  });
+  document.querySelectorAll("[data-inbound-date-input], [data-inbound-qty-input]").forEach((control) => {
+    setControlLock(control, locked || !hasPermission("editSchedule"), "입고일정 수정 권한이 필요합니다.");
   });
   document.querySelectorAll("[data-note-input]").forEach((control) => {
     setControlLock(control, locked || !hasPermission("editMemo"), "메모 수정 권한이 필요합니다.");
