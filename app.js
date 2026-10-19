@@ -462,7 +462,7 @@ function render() {
   const visibleItems = state.items
     .filter(isVisibleInventoryItem)
     .map((item) => ({ ...item, availableStock: item.stock - item.processingStock, status: getStatus(item) }));
-  const items = visibleItems.filter((item) => !item.autoZeroHidden);
+  const items = visibleItems.filter((item) => !isAutoHiddenForDisplay(item));
   const total = items.length;
   const negative = visibleItems.filter(isActualNegativeItem).length;
   const watch = visibleItems.filter(hasAnyStockChange).length;
@@ -651,14 +651,14 @@ function renderCell(item, column, rowNumber = 0) {
     if (["stock", "processingStock", "availableStock"].includes(column.key)) {
       return renderStockNumberCell(item, column.key, value);
     }
-    if (column.key === "inboundQty" && activeTab === "all" && activeView === "stock") {
+    if (column.key === "inboundQty" && ["all", "stock"].includes(activeView)) {
       return renderInboundQtyCell(item);
     }
     const extraClass = column.key === "inboundQty" ? " inbound-qty-cell" : "";
     return `<td class="number-cell${extraClass}">${formatNumber(value)}</td>`;
   }
   if (column.key === "inboundDate") {
-    if (activeTab === "all" && activeView === "stock") return renderInboundDateCell(item);
+    if (["all", "stock"].includes(activeView)) return renderInboundDateCell(item);
     return `<td class="schedule-cell">${escapeHtml(item.inboundDate || "-")}</td>`;
   }
   if (column.key === "source") return `<td class="text-cell">${item.inSimpleStock ? escapeHtml(item.source || "심플 재고목록") : "주문서 기준자료"}</td>`;
@@ -1556,14 +1556,14 @@ function getUrgentRank(item) {
 
 function matchesActiveTab(item) {
   if (activeTab === "all") {
-    if (showAutoHiddenInAll) return Boolean(item.autoZeroHidden);
-    if (item.autoZeroHidden) return false;
+    if (showAutoHiddenInAll) return Boolean(item.autoZeroHidden && !isApprovedSimpleItem(item));
+    if (isAutoHiddenForDisplay(item)) return false;
     if (!isApprovedSimpleItem(item)) return false;
     return matchesItemTypeFilter(item);
   }
   if (activeTab === "watch") return isHoldNeededItem(item);
-  if (item.autoZeroHidden) return false;
   if (activeTab === "allStockChanges") return matchesChangeFilter(item);
+  if (item.autoZeroHidden) return false;
   if (activeTab === "negative") return isActualNegativeItem(item);
   return item.status.key === activeTab;
 }
@@ -1633,6 +1633,10 @@ function isStagnantStockItem(item) {
   if (!isApprovedSimpleItem(item)) return false;
   const days = getStagnantStockDays(item);
   return Number.isFinite(days) && days >= STAGNANT_STOCK_DAYS;
+}
+
+function isAutoHiddenForDisplay(item) {
+  return Boolean(item.autoZeroHidden && !isApprovedSimpleItem(item));
 }
 
 function getStagnantStockDays(item) {
@@ -1969,9 +1973,10 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
         availableStock,
       }));
     }
+    const effectiveSimpleStatus = simpleStatus || existing?.simpleStatus || "";
     const payload = {
       code,
-      simpleStatus: simpleStatus || existing?.simpleStatus || "",
+      simpleStatus: effectiveSimpleStatus,
       name: importedName || existing?.name || "",
       stock,
       previousStock,
@@ -1986,7 +1991,7 @@ function applyInventoryImport(table, fileName, importedCodes = null, importConte
       stockChangedAt,
       inSimpleStock: true,
       hiddenFromInventory: false,
-      autoZeroHidden: shouldAutoHideZeroStock(stock, processingStock),
+      autoZeroHidden: shouldAutoHideZeroStock(stock, processingStock, effectiveSimpleStatus),
       source: fileName,
       salesLinks: normalizeSalesLinks(existing?.salesLinks),
       priceSettings: normalizePriceSettings(existing?.priceSettings),
@@ -2050,10 +2055,15 @@ function isScratchLimitedItemName(name) {
   return text.includes("스크래치") || (text.includes("한정수량") && text.includes("래치"));
 }
 
-function shouldAutoHideZeroStock(stock, processingStock) {
+function shouldAutoHideZeroStock(stock, processingStock, simpleStatus = "") {
   const currentStock = toInteger(stock, 0);
   const currentProcessingStock = toInteger(processingStock, 0);
-  return currentStock === 0 && currentProcessingStock === 0 && currentStock - currentProcessingStock === 0;
+  return (
+    currentStock === 0 &&
+    currentProcessingStock === 0 &&
+    currentStock - currentProcessingStock === 0 &&
+    normalizeSimpleStatus(simpleStatus) !== "승인"
+  );
 }
 
 function applyOrderImport(table, fileName) {
