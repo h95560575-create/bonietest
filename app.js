@@ -138,6 +138,7 @@ const els = {
   periodEndInput: document.getElementById("periodEndInput"),
   changeFilterBar: document.getElementById("changeFilterBar"),
   exportBtn: document.getElementById("exportBtn"),
+  userManageBtn: document.getElementById("userManageBtn"),
   adminBtn: document.getElementById("adminBtn"),
   loginBtn: document.getElementById("loginBtn"),
   clearDataBtn: document.getElementById("clearDataBtn"),
@@ -164,10 +165,24 @@ const els = {
   loginPassword: document.getElementById("loginPassword"),
   loginMessage: document.getElementById("loginMessage"),
   loginCloseBtn: document.getElementById("loginCloseBtn"),
+  openSignupBtn: document.getElementById("openSignupBtn"),
+  signupModal: document.getElementById("signupModal"),
+  signupForm: document.getElementById("signupForm"),
+  signupLoginId: document.getElementById("signupLoginId"),
+  signupDisplayName: document.getElementById("signupDisplayName"),
+  signupPassword: document.getElementById("signupPassword"),
+  signupPasswordConfirm: document.getElementById("signupPasswordConfirm"),
+  signupMessage: document.getElementById("signupMessage"),
+  signupCloseBtn: document.getElementById("signupCloseBtn"),
+  signupBackBtn: document.getElementById("signupBackBtn"),
   adminModal: document.getElementById("adminModal"),
   adminCloseBtn: document.getElementById("adminCloseBtn"),
   adminUserList: document.getElementById("adminUserList"),
   adminMessage: document.getElementById("adminMessage"),
+  adminCreateForm: document.getElementById("adminCreateForm"),
+  adminCreateLoginId: document.getElementById("adminCreateLoginId"),
+  adminCreateDisplayName: document.getElementById("adminCreateDisplayName"),
+  adminCreatePassword: document.getElementById("adminCreatePassword"),
 };
 
 document.querySelectorAll("[data-tab]").forEach((button) => {
@@ -240,6 +255,7 @@ els.exportBtn.addEventListener("click", exportCsv);
 if (els.autoHiddenToggleBtn) els.autoHiddenToggleBtn.addEventListener("click", toggleAutoHiddenInAll);
 if (els.selectedDownloadBtn) els.selectedDownloadBtn.addEventListener("click", exportSelectedItems);
 els.adminBtn.addEventListener("click", openAdminModal);
+if (els.userManageBtn) els.userManageBtn.addEventListener("click", openAdminModal);
 els.loginBtn.addEventListener("click", handleLoginButton);
 if (els.clearDataBtn) els.clearDataBtn.addEventListener("click", clearAllData);
 els.inventoryImportBtn.addEventListener("click", () => {
@@ -268,11 +284,22 @@ els.loginModal.addEventListener("click", (event) => {
   if (event.target === els.loginModal) closeLoginModal();
 });
 els.loginForm.addEventListener("submit", handleLoginSubmit);
+if (els.openSignupBtn) els.openSignupBtn.addEventListener("click", openSignupModal);
 els.adminCloseBtn.addEventListener("click", closeAdminModal);
 els.adminModal.addEventListener("click", (event) => {
   if (event.target === els.adminModal) closeAdminModal();
 });
 els.adminUserList.addEventListener("change", handleAdminPermissionChange);
+if (els.signupCloseBtn) els.signupCloseBtn.addEventListener("click", closeSignupModal);
+if (els.signupBackBtn) els.signupBackBtn.addEventListener("click", () => {
+  closeSignupModal();
+  openLoginModal("");
+});
+if (els.signupModal) els.signupModal.addEventListener("click", (event) => {
+  if (event.target === els.signupModal) closeSignupModal();
+});
+if (els.signupForm) els.signupForm.addEventListener("submit", handleSignupSubmit);
+if (els.adminCreateForm) els.adminCreateForm.addEventListener("submit", handleAdminCreateSubmit);
 
 render();
 bootApp();
@@ -1267,6 +1294,7 @@ function setLoginUser(user) {
   els.loginBtn.classList.toggle("primary", !name);
   els.loginBtn.classList.toggle("subtle", Boolean(name));
   if (els.adminBtn) els.adminBtn.hidden = !hasPermission("manageUsers");
+  if (els.userManageBtn) els.userManageBtn.hidden = currentUser?.role !== "admin";
 }
 
 function requireLogin(permissionKey = "") {
@@ -1325,6 +1353,18 @@ function closeLoginModal() {
   els.loginModal.hidden = true;
 }
 
+function openSignupModal() {
+  closeLoginModal();
+  if (els.signupMessage) els.signupMessage.textContent = "";
+  if (els.signupForm) els.signupForm.reset();
+  els.signupModal.hidden = false;
+  setTimeout(() => els.signupLoginId?.focus(), 0);
+}
+
+function closeSignupModal() {
+  if (els.signupModal) els.signupModal.hidden = true;
+}
+
 async function handleLoginSubmit(event) {
   event.preventDefault();
   const loginId = els.loginName.value.trim();
@@ -1351,6 +1391,34 @@ async function handleLoginSubmit(event) {
   }
 }
 
+async function handleSignupSubmit(event) {
+  event.preventDefault();
+  const loginId = els.signupLoginId.value.trim();
+  const displayName = els.signupDisplayName.value.trim();
+  const password = els.signupPassword.value;
+  const passwordConfirm = els.signupPasswordConfirm.value;
+  if (password !== passwordConfirm) {
+    els.signupMessage.textContent = "비밀번호가 서로 다릅니다.";
+    return;
+  }
+  els.signupMessage.textContent = "아이디를 만드는 중...";
+  try {
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ loginId, displayName, password }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "아이디를 만들지 못했습니다.");
+    closeSignupModal();
+    openLoginModal("아이디가 만들어졌습니다. 이제 로그인해주세요.");
+    els.loginName.value = loginId;
+  } catch (error) {
+    els.signupMessage.textContent = error.message || "아이디를 만들지 못했습니다.";
+  }
+}
+
 async function openAdminModal() {
   if (!requireLogin("manageUsers")) return;
   els.adminModal.hidden = false;
@@ -1367,18 +1435,42 @@ async function openAdminModal() {
   }
 }
 
+async function handleAdminCreateSubmit(event) {
+  event.preventDefault();
+  if (!requireLogin("manageUsers")) return;
+  const loginId = els.adminCreateLoginId.value.trim();
+  const displayName = els.adminCreateDisplayName.value.trim();
+  const password = els.adminCreatePassword.value;
+  els.adminMessage.textContent = "아이디를 만드는 중...";
+  try {
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ loginId, displayName, password }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "아이디를 만들지 못했습니다.");
+    els.adminCreateForm.reset();
+    els.adminMessage.textContent = "아이디가 추가되었습니다. 아래 목록에서 권한을 체크해주세요.";
+    await openAdminModal();
+  } catch (error) {
+    els.adminMessage.textContent = error.message || "아이디를 만들지 못했습니다.";
+  }
+}
+
 function closeAdminModal() {
   els.adminModal.hidden = true;
 }
 
 function renderAdminUserRow(user) {
   const permissionLabels = [
-    ["uploadInventory", "재고등록"],
-    ["editMemo", "메모"],
-    ["editSchedule", "입고일정"],
-    ["manageLinks", "변경코드"],
-    ["manageUsers", "사용자관리"],
+    ["all", "전체"],
+    ["editSchedule", "재고/일정"],
+    ["manageLinks", "수량"],
+    ["uploadInventory", "파일등록"],
   ];
+  const allChecked = user.role === "admin" || Boolean(user.permissions?.editMemo && user.permissions?.editSchedule && user.permissions?.manageLinks && user.permissions?.uploadInventory);
   return `
     <article class="admin-user-row" data-user-id="${escapeHtml(user.id)}">
       <div class="admin-user-main">
@@ -1393,7 +1485,7 @@ function renderAdminUserRow(user) {
         .map(
           ([key, label]) => `
             <label class="admin-check">
-              <input type="checkbox" data-admin-field="${key}" ${user.permissions?.[key] ? "checked" : ""} />
+              <input type="checkbox" data-admin-field="${key}" ${key === "all" ? (allChecked ? "checked" : "") : (user.permissions?.[key] ? "checked" : "")} ${user.role === "admin" ? "disabled" : ""} />
               ${label}
             </label>
           `,
@@ -1410,18 +1502,25 @@ async function handleAdminPermissionChange(event) {
   if (!row) return;
   const userId = row.dataset.userId;
   const payload = { userId };
-  row.querySelectorAll("[data-admin-field]").forEach((field) => {
-    const name = field.dataset.adminField;
-    const serverKey = {
-      isActive: "is_active",
-      uploadInventory: "can_upload_inventory",
-      editMemo: "can_edit_memo",
-      editSchedule: "can_edit_schedule",
-      manageLinks: "can_manage_links",
-      manageUsers: "can_manage_users",
-    }[name];
-    if (serverKey) payload[serverKey] = field.checked;
-  });
+  const all = row.querySelector('[data-admin-field="all"]');
+  const schedule = row.querySelector('[data-admin-field="editSchedule"]');
+  const quantity = row.querySelector('[data-admin-field="manageLinks"]');
+  const upload = row.querySelector('[data-admin-field="uploadInventory"]');
+  const active = row.querySelector('[data-admin-field="isActive"]');
+  if (active) payload.is_active = active.checked;
+  if (all?.checked && input === all) {
+    [schedule, quantity, upload].forEach((field) => { if (field) field.checked = true; });
+  }
+  if (!all?.checked && input === all) {
+    [schedule, quantity, upload].forEach((field) => { if (field) field.checked = false; });
+  }
+  if (input !== all && all) {
+    all.checked = Boolean(schedule?.checked && quantity?.checked && upload?.checked);
+  }
+  payload.can_upload_inventory = Boolean(upload?.checked);
+  payload.can_edit_schedule = Boolean(schedule?.checked);
+  payload.can_manage_links = Boolean(quantity?.checked);
+  payload.can_edit_memo = Boolean(all?.checked && schedule?.checked && quantity?.checked && upload?.checked);
 
   els.adminMessage.textContent = "권한 저장 중...";
   try {

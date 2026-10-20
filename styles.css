@@ -1210,6 +1210,42 @@ tbody tr:hover td {
   width: min(920px, calc(100vw - 32px));
 }
 
+.admin-create-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.admin-create-form strong {
+  grid-column: 1 / -1;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.admin-create-form input {
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.admin-permission-help {
+  margin: 0 22px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .admin-user-list {
   display: grid;
   gap: 10px;
@@ -1220,13 +1256,24 @@ tbody tr:hover td {
 
 .admin-user-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) repeat(6, auto);
+  grid-template-columns: minmax(160px, 1.4fr) repeat(5, auto);
   align-items: center;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
+}
+
+@media (max-width: 760px) {
+  .admin-create-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-create-form input:nth-of-type(3),
+  .admin-create-form .button {
+    grid-column: span 2;
+  }
 }
 
 .admin-user-main strong,

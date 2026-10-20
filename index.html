@@ -18,6 +18,7 @@
         </div>
         <div class="top-actions">
           <button class="button" id="exportBtn" type="button">CSV 내보내기</button>
+          <button class="button subtle" id="userManageBtn" type="button" hidden>아이디 관리</button>
           <button class="button subtle" id="adminBtn" type="button" hidden>관리자모드</button>
           <button class="button primary" id="loginBtn" type="button">로그인</button>
           <!-- <button class="button subtle" id="clearDataBtn" type="button">초기화</button> -->
@@ -212,6 +213,42 @@
           <p class="login-message" id="loginMessage"></p>
           <div class="dialog-actions">
             <button class="button primary" type="submit">로그인</button>
+            <button class="button subtle" id="openSignupBtn" type="button">아이디 만들기</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="signupModal" hidden>
+      <section class="history-modal login-modal" role="dialog" aria-modal="true" aria-labelledby="signupTitle">
+        <div class="history-modal-head">
+          <div>
+            <span>새 사용자</span>
+            <h2 id="signupTitle">아이디 만들기</h2>
+          </div>
+          <button class="icon-button" id="signupCloseBtn" type="button" aria-label="닫기">×</button>
+        </div>
+        <form class="login-form" id="signupForm">
+          <label class="field">
+            <span>아이디</span>
+            <input id="signupLoginId" type="text" placeholder="사용할 아이디" autocomplete="username" required />
+          </label>
+          <label class="field">
+            <span>이름</span>
+            <input id="signupDisplayName" type="text" placeholder="화면에 보일 이름" autocomplete="name" required />
+          </label>
+          <label class="field">
+            <span>비밀번호</span>
+            <input id="signupPassword" type="password" placeholder="8자 이상" autocomplete="new-password" minlength="8" required />
+          </label>
+          <label class="field">
+            <span>비밀번호 확인</span>
+            <input id="signupPasswordConfirm" type="password" placeholder="비밀번호 다시 입력" autocomplete="new-password" minlength="8" required />
+          </label>
+          <p class="login-message" id="signupMessage"></p>
+          <div class="dialog-actions">
+            <button class="button primary" type="submit">아이디 만들기</button>
+            <button class="button subtle" id="signupBackBtn" type="button">로그인으로 돌아가기</button>
           </div>
         </form>
       </section>
@@ -222,15 +259,23 @@
         <div class="history-modal-head">
           <div>
             <span>관리자 전용</span>
-            <h2 id="adminTitle">사용자 권한</h2>
+            <h2 id="adminTitle">아이디 관리</h2>
           </div>
           <button class="icon-button" id="adminCloseBtn" type="button" aria-label="닫기">×</button>
         </div>
+        <form class="admin-create-form" id="adminCreateForm">
+          <strong>새 아이디 추가</strong>
+          <input id="adminCreateLoginId" type="text" placeholder="아이디" required />
+          <input id="adminCreateDisplayName" type="text" placeholder="이름" required />
+          <input id="adminCreatePassword" type="password" placeholder="비밀번호 8자 이상" minlength="8" required />
+          <button class="button primary" type="submit">추가</button>
+        </form>
+        <p class="admin-permission-help">체크한 기능만 수정할 수 있습니다. 전체를 체크하면 모든 기능을 수정할 수 있습니다.</p>
         <div class="admin-user-list" id="adminUserList"></div>
         <p class="login-message" id="adminMessage"></p>
       </section>
     </div>
 
-    <script src="app.js?v=approved-zero-visible-20261019"></script>
+    <script src="app.js?v=account-permissions-20261020"></script>
   </body>
 </html>

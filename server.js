@@ -75,6 +75,7 @@ const server = http.createServer(async (req, res) => {
       },
     });
     if (url.pathname === "/api/auth/login") return handleLogin(req, res);
+    if (url.pathname === "/api/auth/signup") return handleSignup(req, res);
     if (url.pathname === "/api/auth/logout") return handleLogout(req, res);
     if (url.pathname === "/api/auth/me") return handleMe(req, res);
     if (url.pathname === "/api/state") return handleStateApi(req, res);
@@ -113,6 +114,58 @@ async function handleLogin(req, res) {
 
   setSessionCookies(res, session);
   sendJson(res, { user: publicProfile(profile) });
+}
+
+async function handleSignup(req, res) {
+  if (req.method !== "POST") return sendJson(res, { error: "Method not allowed" }, 405);
+  if (!isSupabaseConfigured()) return sendJson(res, { error: "Supabase env is not configured" }, 503);
+
+  const body = await readJsonBody(req);
+  const loginId = normalizeLoginId(body.loginId);
+  const displayName = String(body.displayName || "").trim();
+  const password = String(body.password || "");
+  if (!/^[a-z0-9가-힣][a-z0-9가-힣._-]{2,29}$/i.test(loginId)) {
+    return sendJson(res, { error: "아이디는 3~30자의 한글, 영문, 숫자와 . _ - 만 사용할 수 있습니다." }, 400);
+  }
+  if (!displayName || displayName.length > 40) return sendJson(res, { error: "이름을 입력해주세요." }, 400);
+  if (password.length < 8) return sendJson(res, { error: "비밀번호는 8자 이상이어야 합니다." }, 400);
+
+  const existing = await findProfileByLoginId(loginId);
+  if (existing) return sendJson(res, { error: "이미 사용 중인 아이디입니다." }, 409);
+
+  const email = internalEmailForLoginId(loginId);
+  const authUser = await supabaseAdminAuth("/admin/users", "POST", {
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { login_id: loginId, display_name: displayName },
+  });
+  if (!authUser?.id) return sendJson(res, { error: "계정을 만들지 못했습니다. 관리자에게 문의해주세요." }, 400);
+
+  try {
+    const rows = await supabaseRest("profiles", "POST", {
+      user_id: authUser.id,
+      login_id: loginId,
+      display_name: displayName,
+      email,
+      role: "member",
+      is_active: true,
+      can_upload_inventory: false,
+      can_edit_memo: false,
+      can_edit_schedule: false,
+      can_manage_links: false,
+      can_manage_users: false,
+    }, { Prefer: "return=representation" });
+    if (!rows?.[0]) throw new Error("프로필 저장에 실패했습니다.");
+  } catch (error) {
+    await supabaseAdminAuth(`/admin/users/${encodeURIComponent(authUser.id)}`, "DELETE").catch(() => null);
+    if (String(error.message || "").includes("duplicate") || String(error.message || "").includes("unique")) {
+      return sendJson(res, { error: "이미 사용 중인 아이디입니다." }, 409);
+    }
+    throw error;
+  }
+
+  sendJson(res, { ok: true, message: "아이디가 만들어졌습니다." }, 201);
 }
 
 async function handleLogout(req, res) {
@@ -307,6 +360,26 @@ async function supabaseAuth(pathname, method, bearer, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) return null;
+  return response.json();
+}
+
+async function supabaseAdminAuth(pathname, method, body) {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1${pathname}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    const error = new Error(`Supabase Auth error ${response.status}: ${message}`);
+    error.statusCode = response.status;
+    throw error;
+  }
+  if (response.status === 204) return null;
   return response.json();
 }
 
@@ -616,6 +689,11 @@ function normalizeSimpleStatus(value) {
 
 function normalizeLoginId(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function internalEmailForLoginId(loginId) {
+  const digest = crypto.createHash("sha256").update(String(loginId)).digest("hex").slice(0, 32);
+  return `account-${digest}@users.jaesodan.local`;
 }
 
 function clampNumber(value, min, max, fallback) {
